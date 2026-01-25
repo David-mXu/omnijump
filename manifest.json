@@ -1,11 +1,18 @@
 {
   "manifest_version": 3,
-  "name": "Search shortcuts",
+  "name": "Omnibar Shortcuts",
   "version": "1.0",
-  "description": "Create custom keywords to instantly go to a set website",
-  "permissions": ["activeTab", "scripting"],
+  "description": "Create custom keywords to instantly go to a set website using omnibar search",
+  "permissions": ["storage", "webNavigation", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "dist/background.js"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": "icon.png" 
+  },
+  "icons": {
+    "128": "icon.png"
   }
 }

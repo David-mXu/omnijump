@@ -1,15 +1,18 @@
 {
-  "name": "keyboard-shortcuts",
+  "name": "omnibar-shortcuts",
   "version": "1.0.0",
-  "description": "",
+  "description": "Chrome extension for custom omnibar shortcuts",
   "main": "index.js",
   "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "clean": "rm -rf dist",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": ["chrome-extension", "omnibar", "shortcuts"],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "devDependencies": {
     "@types/chrome": "^0.1.35",
     "typescript": "^5.9.3"
