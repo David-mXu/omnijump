@@ -1,0 +1,84 @@
+{
+  "shortcuts": {
+    "example-gh": {
+      "id": "example-gh",
+      "keyword": "gh",
+      "url": "https://github.com/search?q=%s",
+      "description": "Search GitHub repositories",
+      "createdAt": 1706202000000,
+      "updatedAt": 1706202000000
+    },
+    "example-reddit": {
+      "id": "example-reddit",
+      "keyword": "r",
+      "url": "https://reddit.com/r/%s",
+      "description": "Go to a subreddit",
+      "createdAt": 1706202000000,
+      "updatedAt": 1706202000000
+    },
+    "example-youtube": {
+      "id": "example-youtube",
+      "keyword": "yt",
+      "url": "https://www.youtube.com/results?search_query=%s",
+      "description": "Search YouTube",
+      "createdAt": 1706202000000,
+      "updatedAt": 1706202000000
+    },
+    "example-wiki": {
+      "id": "example-wiki",
+      "keyword": "w",
+      "url": "https://en.wikipedia.org/wiki/%s",
+      "description": "Wikipedia article lookup",
+      "createdAt": 1706202000000,
+      "updatedAt": 1706202000000
+    },
+    "example-maps": {
+      "id": "example-maps",
+      "keyword": "maps",
+      "url": "https://www.google.com/maps/search/%s",
+      "description": "Google Maps search",
+      "createdAt": 1706202000000,
+      "updatedAt": 1706202000000
+    },
+    "example-twitter": {
+      "id": "example-twitter",
+      "keyword": "tw",
+      "url": "https://twitter.com/%s",
+      "description": "Go to Twitter profile",
+      "createdAt": 1706202000000,
+      "updatedAt": 1706202000000
+    },
+    "example-npm": {
+      "id": "example-npm",
+      "keyword": "npm",
+      "url": "https://www.npmjs.com/search?q=%s",
+      "description": "Search npm packages",
+      "bundleId": "example-bundle-dev",
+      "createdAt": 1706202000000,
+      "updatedAt": 1706202000000
+    },
+    "example-mdn": {
+      "id": "example-mdn",
+      "keyword": "mdn",
+      "url": "https://developer.mozilla.org/en-US/search?q=%s",
+      "description": "Search MDN Web Docs",
+      "bundleId": "example-bundle-dev",
+      "createdAt": 1706202000000,
+      "updatedAt": 1706202000000
+    }
+  },
+  "bundles": {
+    "example-bundle-dev": {
+      "id": "example-bundle-dev",
+      "name": "Development Tools",
+      "description": "Shortcuts for developers",
+      "enabled": true,
+      "createdAt": 1706202000000,
+      "updatedAt": 1706202000000
+    }
+  },
+  "settings": {
+    "showSuggestions": true,
+    "defaultSearchEngine": "https://www.google.com/search?q=%s"
+  }
+}

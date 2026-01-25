@@ -23,6 +23,18 @@ A powerful Chrome extension that lets you create custom keyboard shortcuts for i
 6. Click "Load unpacked"
 7. Select the extension directory
 
+### Quick Start
+
+Want to try it out with example shortcuts? Import `examples/example-shortcuts.json` from the popup to get:
+- GitHub search (`gh`)
+- Reddit subreddits (`r`)
+- YouTube search (`yt`)
+- Wikipedia (`w`)
+- Google Maps (`maps`)
+- Twitter profiles (`tw`)
+- npm packages (`npm`)
+- MDN docs (`mdn`)
+
 ### Firefox (Experimental)
 
 1. Follow build steps above
