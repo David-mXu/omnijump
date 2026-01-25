@@ -1,0 +1,35 @@
+{
+  "shortcuts": {
+    "gh": {
+      "keyword": "gh",
+      "target": "https://github.com",
+      "createdAt": 1706198400000
+    },
+    "gm": {
+      "keyword": "gm",
+      "target": "https://mail.google.com",
+      "createdAt": 1706198400000
+    },
+    "yt": {
+      "keyword": "yt",
+      "target": "https://youtube.com",
+      "createdAt": 1706198400000
+    },
+    "tw": {
+      "keyword": "tw",
+      "target": "https://twitter.com",
+      "createdAt": 1706198400000
+    },
+    "ghs": {
+      "keyword": "ghs",
+      "target": "https://github.com/search?q=%s",
+      "createdAt": 1706198400000
+    },
+    "so": {
+      "keyword": "so",
+      "target": "https://stackoverflow.com/search?q=%s",
+      "createdAt": 1706198400000
+    }
+  },
+  "bundles": {}
+}

@@ -21,7 +21,8 @@ const SEARCH_ENGINES = [
 function isSearchEngine(url: string): boolean {
   try {
     const urlObj = new URL(url);
-    return SEARCH_ENGINES.some(engine => urlObj.hostname.includes(engine));
+    // Use exact hostname matching to prevent false positives
+    return SEARCH_ENGINES.some(engine => urlObj.hostname === engine || urlObj.hostname.endsWith('.' + engine));
   } catch {
     return false;
   }

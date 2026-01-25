@@ -159,12 +159,22 @@ function escapeHtml(text: string): string {
  * Check for pending shortcut URL from context menu
  */
 async function checkPendingUrl() {
-  chrome.runtime.sendMessage({ type: 'getPendingUrl' }, (response) => {
-    if (response?.url) {
-      targetInput.value = response.url;
-      keywordInput.focus();
-    }
-  });
+  try {
+    chrome.runtime.sendMessage({ type: 'getPendingUrl' }, (response) => {
+      // Check for runtime errors
+      if (chrome.runtime.lastError) {
+        console.warn('Failed to get pending URL:', chrome.runtime.lastError.message);
+        return;
+      }
+      
+      if (response?.url) {
+        targetInput.value = response.url;
+        keywordInput.focus();
+      }
+    });
+  } catch (error) {
+    console.warn('Error checking pending URL:', error);
+  }
 }
 
 // Event listeners

@@ -1,8 +1,8 @@
-/**
- * Matching algorithm for URL interception
- */
-
 import { Shortcut } from './storage.js';
+
+// Maximum length for a keyword extracted from URL path
+// Prevents false positives from long path segments that are unlikely to be shortcuts
+const MAX_KEYWORD_LENGTH = 20;
 
 /**
  * Parse a URL to extract potential shortcut patterns
@@ -32,7 +32,7 @@ export function parseUrlForShortcut(url: string): { keyword: string; query?: str
 
     // Check path for potential shortcuts (e.g., /search/keyword)
     const pathParts = urlObj.pathname.split('/').filter(p => p);
-    if (pathParts.length > 0 && pathParts[0].length < 20) {
+    if (pathParts.length > 0 && pathParts[0].length < MAX_KEYWORD_LENGTH) {
       return { keyword: pathParts[0] };
     }
   } catch (e) {
