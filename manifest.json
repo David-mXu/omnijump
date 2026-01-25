@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Search shortcuts",
+  "version": "1.0",
+  "description": "Create custom keywords to instantly go to a set website",
+  "permissions": ["activeTab", "scripting"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png" 
+  }
+}
