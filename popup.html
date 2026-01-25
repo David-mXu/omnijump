@@ -5,7 +5,7 @@
     <link rel="stylesheet" href="style.css">
     <style>
       body {
-        width: 400px;
+        width: 450px;
         padding: 16px;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         font-size: 14px;
@@ -27,7 +27,7 @@
         font-weight: 500;
         font-size: 13px;
       }
-      input[type="text"] {
+      input[type="text"], select {
         width: 100%;
         padding: 8px;
         border: 1px solid #ccc;
@@ -111,39 +111,164 @@
         font-style: italic;
         margin-top: 4px;
       }
+      .tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+        border-bottom: 1px solid #e0e0e0;
+      }
+      .tab {
+        padding: 8px 16px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 13px;
+        color: #5f6368;
+        border-bottom: 2px solid transparent;
+      }
+      .tab:hover {
+        background: #f8f9fa;
+      }
+      .tab.active {
+        color: #1a73e8;
+        border-bottom-color: #1a73e8;
+      }
+      .tab-content {
+        display: none;
+      }
+      .tab-content.active {
+        display: block;
+      }
+      .bundle-item {
+        padding: 12px;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        margin-bottom: 8px;
+        background: #f8f9fa;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .bundle-info {
+        flex: 1;
+      }
+      .bundle-name {
+        font-weight: 600;
+        color: #202124;
+      }
+      .bundle-actions {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+      }
+      .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 20px;
+        margin-right: 8px;
+      }
+      .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+        border-radius: 20px;
+      }
+      .slider:before {
+        position: absolute;
+        content: "";
+        height: 14px;
+        width: 14px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+      }
+      input:checked + .slider {
+        background-color: #4285f4;
+      }
+      input:checked + .slider:before {
+        transform: translateX(20px);
+      }
     </style>
   </head>
   <body>
     <h2>🔍 Omnibar Shortcuts</h2>
     
-    <div class="section">
-      <h3 style="font-size: 15px; margin: 0 0 12px 0;">Add New Shortcut</h3>
-      <div class="form-group">
-        <label for="keyword">Keyword</label>
-        <input type="text" id="keyword" placeholder="gh" />
-        <div class="info">The shortcut you'll type in the omnibar</div>
-      </div>
-      <div class="form-group">
-        <label for="url">URL</label>
-        <input type="text" id="url" placeholder="https://github.com" />
-        <div class="info">Use %s for search terms (e.g., https://github.com/search?q=%s)</div>
-      </div>
-      <div class="form-group">
-        <label for="description">Description (optional)</label>
-        <input type="text" id="description" placeholder="GitHub homepage" />
-      </div>
-      <button id="addBtn">Add Shortcut</button>
+    <div class="tabs">
+      <button class="tab active" data-tab="shortcuts">Shortcuts</button>
+      <button class="tab" data-tab="bundles">Bundles</button>
     </div>
     
-    <div class="section">
-      <h3 style="font-size: 15px; margin: 0 0 12px 0;">Your Shortcuts</h3>
-      <div id="shortcutList" class="shortcut-list"></div>
+    <!-- Shortcuts Tab -->
+    <div id="shortcuts-tab" class="tab-content active">
+      <div class="section">
+        <h3 style="font-size: 15px; margin: 0 0 12px 0;">Add New Shortcut</h3>
+        <div class="form-group">
+          <label for="keyword">Keyword</label>
+          <input type="text" id="keyword" placeholder="gh" />
+          <div class="info">The shortcut you'll type in the omnibar</div>
+        </div>
+        <div class="form-group">
+          <label for="url">URL</label>
+          <input type="text" id="url" placeholder="https://github.com" />
+          <div class="info">Use %s for search terms (e.g., https://github.com/search?q=%s)</div>
+        </div>
+        <div class="form-group">
+          <label for="description">Description (optional)</label>
+          <input type="text" id="description" placeholder="GitHub homepage" />
+        </div>
+        <div class="form-group">
+          <label for="bundleSelect">Bundle (optional)</label>
+          <select id="bundleSelect">
+            <option value="">No bundle</option>
+          </select>
+        </div>
+        <button id="addBtn">Add Shortcut</button>
+      </div>
+      
+      <div class="section">
+        <h3 style="font-size: 15px; margin: 0 0 12px 0;">Your Shortcuts</h3>
+        <div id="shortcutList" class="shortcut-list"></div>
+      </div>
+      
+      <div class="section">
+        <div class="button-group">
+          <button id="exportBtn" class="secondary">Export</button>
+          <button id="importBtn" class="secondary">Import</button>
+        </div>
+      </div>
     </div>
     
-    <div class="section">
-      <div class="button-group">
-        <button id="exportBtn" class="secondary">Export</button>
-        <button id="importBtn" class="secondary">Import</button>
+    <!-- Bundles Tab -->
+    <div id="bundles-tab" class="tab-content">
+      <div class="section">
+        <h3 style="font-size: 15px; margin: 0 0 12px 0;">Create New Bundle</h3>
+        <div class="form-group">
+          <label for="bundleName">Bundle Name</label>
+          <input type="text" id="bundleName" placeholder="Development Tools" />
+        </div>
+        <div class="form-group">
+          <label for="bundleDescription">Description (optional)</label>
+          <input type="text" id="bundleDescription" placeholder="Shortcuts for development" />
+        </div>
+        <button id="addBundleBtn">Create Bundle</button>
+      </div>
+      
+      <div class="section">
+        <h3 style="font-size: 15px; margin: 0 0 12px 0;">Your Bundles</h3>
+        <div id="bundleList"></div>
       </div>
     </div>
     
