@@ -1,0 +1,18 @@
+{
+  "name": "omnibar-shortcuts",
+  "version": "1.0.0",
+  "description": "MV3 omnibar shortcut engine for Chrome and Firefox",
+  "scripts": {
+    "build": "tsc && npm run copy-files",
+    "copy-files": "cp manifest.json dist/ && cp popup.html dist/ && cp -r icons dist/ 2>/dev/null || true",
+    "build:firefox": "tsc && cp manifest.firefox.json dist/manifest.json && cp popup.html dist/ && cp -r icons dist/ 2>/dev/null || true",
+    "watch": "tsc --watch"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "typescript": "^5.3.3"
+  },
+  "keywords": ["chrome-extension", "omnibar", "shortcuts", "mv3"],
+  "author": "",
+  "license": "MIT"
+}

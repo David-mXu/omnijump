@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Omnibar Shortcuts</title>
+    <style>
+        body {
+            width: 400px;
+            padding: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+        }
+        h1 {
+            font-size: 18px;
+            margin: 0 0 16px 0;
+            color: #333;
+        }
+        .shortcut-form {
+            margin-bottom: 20px;
+            padding: 12px;
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+        .form-group {
+            margin-bottom: 12px;
+        }
+        label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #555;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 60px;
+            font-family: monospace;
+        }
+        button {
+            background: #4285f4;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        button:hover {
+            background: #3367d6;
+        }
+        button.secondary {
+            background: #5f6368;
+            margin-left: 8px;
+        }
+        button.secondary:hover {
+            background: #4a4d52;
+        }
+        .shortcuts-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .shortcut-item {
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            background: white;
+        }
+        .shortcut-keyword {
+            font-weight: 600;
+            color: #1a73e8;
+            font-family: monospace;
+        }
+        .shortcut-target {
+            color: #5f6368;
+            font-size: 13px;
+            margin-top: 4px;
+            word-break: break-all;
+        }
+        .shortcut-actions {
+            margin-top: 8px;
+        }
+        .delete-btn {
+            background: #d93025;
+            padding: 4px 12px;
+            font-size: 12px;
+        }
+        .delete-btn:hover {
+            background: #b92419;
+        }
+        .help-text {
+            font-size: 11px;
+            color: #5f6368;
+            margin-top: 4px;
+        }
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #e0e0e0;
+            margin-bottom: 16px;
+        }
+        .tab {
+            padding: 8px 16px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            color: #5f6368;
+            font-size: 14px;
+        }
+        .tab.active {
+            border-bottom-color: #4285f4;
+            color: #4285f4;
+            font-weight: 500;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>⚡ Omnibar Shortcuts</h1>
+    
+    <div class="tabs">
+        <div class="tab active" data-tab="shortcuts">Shortcuts</div>
+        <div class="tab" data-tab="settings">Settings</div>
+    </div>
+
+    <div id="shortcuts-tab" class="tab-content active">
+        <div class="shortcut-form">
+            <div class="form-group">
+                <label for="keyword">Keyword</label>
+                <input type="text" id="keyword" placeholder="e.g., gh, gm, tw" />
+                <div class="help-text">The shortcut you'll type in the omnibar</div>
+            </div>
+            <div class="form-group">
+                <label for="target">Target URL</label>
+                <textarea id="target" placeholder="e.g., https://github.com or https://example.com/search?q=%s"></textarea>
+                <div class="help-text">Use %s for search queries (e.g., "gh %s" → GitHub search)</div>
+            </div>
+            <button id="add-shortcut">Add Shortcut</button>
+        </div>
+
+        <div class="shortcuts-list" id="shortcuts-list"></div>
+    </div>
+
+    <div id="settings-tab" class="tab-content">
+        <div class="form-group">
+            <button id="export-shortcuts">Export Shortcuts</button>
+            <button id="import-shortcuts" class="secondary">Import Shortcuts</button>
+            <input type="file" id="import-file" accept=".json" style="display: none;" />
+        </div>
+        <div class="help-text" style="margin-top: 12px;">
+            Export your shortcuts as JSON to backup or share them. Import to restore shortcuts from a backup.
+        </div>
+    </div>
+
+    <script type="module" src="popup.js"></script>
+</body>
+</html>
