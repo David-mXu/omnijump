@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Omnibar Shortcuts</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        min-width: 280px;
+        padding: 16px;
+      }
+      h1 {
+        font-size: 14px;
+        margin: 0 0 8px;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        margin-top: 10px;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        margin-top: 4px;
+        padding: 6px 8px;
+        font-size: 12px;
+      }
+      button {
+        margin-top: 12px;
+        width: 100%;
+        padding: 8px 10px;
+        font-size: 12px;
+      }
+      #status {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #555;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Omnibar Shortcuts</h1>
+    <form id="shortcutForm">
+      <label for="shortcutKey">Keyword</label>
+      <input id="shortcutKey" type="text" autocomplete="off" />
+      <label for="shortcutUrl">Destination URL</label>
+      <input id="shortcutUrl" type="url" />
+      <button type="submit">Save Shortcut</button>
+      <div id="status" role="status"></div>
+    </form>
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>

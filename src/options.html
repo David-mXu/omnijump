@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Omnibar Shortcuts</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        padding: 24px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0;
+      }
+      #count {
+        font-size: 12px;
+        color: #555;
+      }
+      ul {
+        list-style: none;
+        padding: 0;
+        margin: 16px 0 0;
+      }
+      li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #eee;
+        gap: 12px;
+      }
+      .item {
+        flex: 1;
+      }
+      .key {
+        font-weight: 600;
+      }
+      .url {
+        color: #555;
+        font-size: 12px;
+        word-break: break-all;
+      }
+      button {
+        padding: 6px 10px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Omnibar Shortcuts</h1>
+      <div id="count"></div>
+    </header>
+    <ul id="shortcutList"></ul>
+    <script type="module" src="./options.ts"></script>
+  </body>
+</html>
