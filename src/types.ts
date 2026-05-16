@@ -5,6 +5,7 @@ export interface Shortcut {
   url: string;
   type: ShortcutType;
   bundleUrls?: string[];
+  label?: string;
 }
 
 export interface UserSettings {
@@ -17,5 +18,5 @@ export interface ShortcutStore {
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
-  maxShortcuts: 5000,
+  maxShortcuts: 500,
 };

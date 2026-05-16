@@ -38,6 +38,20 @@
         font-size: 12px;
         color: #555;
       }
+      #openPanel {
+        margin-top: 10px;
+        width: 100%;
+        padding: 6px;
+        font-size: 11px;
+        background: none;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+        color: #555;
+        cursor: pointer;
+      }
+      #openPanel:hover {
+        background: #f5f5f5;
+      }
     </style>
   </head>
   <body>
@@ -46,10 +60,11 @@
       <label for="shortcutKey">Keyword</label>
       <input id="shortcutKey" type="text" autocomplete="off" />
       <label for="shortcutUrl">Destination URL</label>
-      <input id="shortcutUrl" type="url" />
+      <input id="shortcutUrl" type="text" placeholder="google.com or https://..." />
       <button type="submit">Save Shortcut</button>
       <div id="status" role="status"></div>
     </form>
+    <button type="button" id="openPanel">Open full panel ↗</button>
     <script type="module" src="./popup.ts"></script>
   </body>
 </html>

@@ -9,7 +9,7 @@ function escapeRegex(value: string): string {
 
 function buildQueryRegex(key: string): string {
   const escapedKey = escapeRegex(key);
-  return `.*[?&]q=${escapedKey}(?:&|$)`;
+  return `[?&]q=${escapedKey}(?:&|$)`;
 }
 
 function resolveShortcutUrl(shortcut: Shortcut): string | null {
@@ -30,14 +30,14 @@ function buildRules(shortcuts: Shortcut[]): chrome.declarativeNetRequest.Rule[] 
       id: index + 1,
       priority: 1,
       action: {
-        type: 'redirect',
+        type: 'redirect' as chrome.declarativeNetRequest.RuleActionType,
         redirect: {
           url,
         },
       },
       condition: {
         regexFilter: buildQueryRegex(shortcut.key),
-        resourceTypes: ['main_frame'],
+        resourceTypes: ['main_frame'] as chrome.declarativeNetRequest.ResourceType[],
       },
     };
   });

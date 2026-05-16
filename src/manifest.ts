@@ -20,9 +20,19 @@ export default function createManifest(target: BrowserTarget): Manifest {
     version: '0.1.0',
     description:
       'Instant address-bar shortcuts for redirects, bundles, and dynamic searches.',
+    icons: {
+      '16': 'images/icon16.png',
+      '32': 'images/icon32.png',
+      '48': 'images/icon48.png',
+      '128': 'images/icon128.png',
+    },
     action: {
       default_title: 'Omnibar Shortcuts',
       default_popup: 'src/popup.html',
+      default_icon: {
+        '16': 'images/icon16.png',
+        '32': 'images/icon32.png',
+      },
     },
     options_page: 'src/options.html',
     background: {
@@ -32,6 +42,15 @@ export default function createManifest(target: BrowserTarget): Manifest {
     permissions: BASE_PERMISSIONS,
     host_permissions: ['<all_urls>'],
     minimum_chrome_version: '120',
+    commands: {
+      'open-side-panel': {
+        suggested_key: {
+          default: 'Ctrl+Shift+S',
+          mac: 'MacCtrl+Shift+S',
+        },
+        description: 'Open Omnibar Shortcuts side panel',
+      },
+    },
   };
 
   if (isFirefox) {
@@ -39,11 +58,26 @@ export default function createManifest(target: BrowserTarget): Manifest {
       browser_specific_settings?: {
         gecko?: { id: string; strict_min_version?: string };
       };
+      sidebar_action?: { default_panel: string; default_title: string };
     }).browser_specific_settings = {
       gecko: {
         id: 'omnibar-shortcuts@example.com',
         strict_min_version: '128.0',
       },
+    };
+    (manifest as Manifest & {
+      sidebar_action?: { default_panel: string; default_title: string };
+    }).sidebar_action = {
+      default_panel: 'src/sidepanel.html',
+      default_title: 'Omnibar Shortcuts',
+    };
+  } else {
+    manifest.permissions = [
+      ...(manifest.permissions ?? []),
+      'sidePanel' as chrome.runtime.ManifestPermissions,
+    ];
+    (manifest as Manifest & { side_panel?: { default_path: string } }).side_panel = {
+      default_path: 'src/sidepanel.html',
     };
   }
 

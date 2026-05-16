@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Omnibar Shortcuts</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        font-size: 13px;
+      }
+      nav {
+        display: flex;
+        border-bottom: 1px solid #e0e0e0;
+        background: #f8f8f8;
+      }
+      .tab {
+        flex: 1;
+        padding: 10px 6px;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 12px;
+        color: #555;
+        border-bottom: 2px solid transparent;
+      }
+      .tab.active {
+        color: #4c6ef5;
+        border-bottom-color: #4c6ef5;
+        font-weight: 600;
+      }
+      section {
+        padding: 14px 16px;
+      }
+
+      /* ── Shortcuts panel ── */
+      .add-redirect {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+      }
+      .add-redirect input {
+        flex: 1;
+        min-width: 80px;
+        padding: 5px 7px;
+        font-size: 12px;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+      }
+      .add-redirect button {
+        padding: 5px 10px;
+        font-size: 12px;
+        white-space: nowrap;
+        background: #4c6ef5;
+        color: white;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+      }
+      .add-redirect button:hover {
+        background: #3b5de0;
+      }
+      #addRedirectStatus {
+        width: 100%;
+        font-size: 11px;
+        min-height: 14px;
+        color: #555;
+      }
+      #addRedirectStatus.error { color: #c0392b; }
+      #addRedirectStatus.success { color: #27ae60; }
+      #count {
+        font-size: 11px;
+        color: #777;
+        margin-bottom: 8px;
+      }
+      ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #eee;
+        gap: 10px;
+      }
+      .item {
+        flex: 1;
+        min-width: 0;
+      }
+      .key {
+        font-weight: 600;
+      }
+      .badge {
+        display: inline-block;
+        font-size: 10px;
+        padding: 1px 5px;
+        border-radius: 10px;
+        background: #e8eeff;
+        color: #4c6ef5;
+        margin-left: 6px;
+        vertical-align: middle;
+      }
+      .url {
+        color: #777;
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      button {
+        padding: 4px 8px;
+        font-size: 11px;
+        cursor: pointer;
+      }
+
+      /* ── Bundle panel ── */
+      label {
+        display: block;
+        font-size: 12px;
+        margin-top: 12px;
+        margin-bottom: 3px;
+        color: #333;
+      }
+      input[type="text"],
+      input[type="url"] {
+        width: 100%;
+        padding: 6px 8px;
+        font-size: 12px;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+      }
+      #urlList {
+        margin-top: 12px;
+      }
+      .url-row {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 6px;
+        align-items: center;
+      }
+      .url-row input {
+        flex: 1;
+      }
+      .remove-url {
+        flex-shrink: 0;
+        padding: 4px 8px;
+        font-size: 14px;
+        line-height: 1;
+        background: none;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        cursor: pointer;
+        color: #888;
+      }
+      #addUrl {
+        margin-top: 4px;
+        width: 100%;
+        padding: 6px;
+        font-size: 12px;
+        background: none;
+        border: 1px dashed #aaa;
+        border-radius: 3px;
+        cursor: pointer;
+        color: #555;
+      }
+      #saveBundle {
+        margin-top: 14px;
+        width: 100%;
+        padding: 8px;
+        font-size: 13px;
+        background: #4c6ef5;
+        color: white;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+      }
+      #saveBundle:hover {
+        background: #3b5de0;
+      }
+      #bundleStatus {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #555;
+        min-height: 16px;
+      }
+      #bundleStatus.error { color: #c0392b; }
+      #bundleStatus.success { color: #27ae60; }
+
+      /* ── Settings panel ── */
+      h2 {
+        font-size: 13px;
+        font-weight: 600;
+        margin: 20px 0 6px;
+        color: #222;
+      }
+      h2:first-child {
+        margin-top: 0;
+      }
+      .shortcut-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 5px 0;
+        font-size: 12px;
+        border-bottom: 1px solid #f0f0f0;
+      }
+      .shortcut-label {
+        color: #444;
+      }
+      .shortcut-key {
+        font-family: monospace;
+        background: #f0f0f0;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 11px;
+        color: #333;
+      }
+      #customizeShortcut {
+        margin-top: 10px;
+        font-size: 11px;
+        padding: 4px 8px;
+        background: none;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        cursor: pointer;
+        color: #4c6ef5;
+      }
+      .settings-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 8px;
+      }
+      #maxShortcutsInput {
+        width: 80px;
+        padding: 5px 7px;
+        font-size: 12px;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+      }
+      #saveMaxShortcuts {
+        font-size: 12px;
+        padding: 5px 10px;
+      }
+      #settingsStatus {
+        font-size: 11px;
+        margin-top: 8px;
+        min-height: 16px;
+        color: #555;
+      }
+      #settingsStatus.error { color: #c0392b; }
+      #settingsStatus.success { color: #27ae60; }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <button id="tabShortcuts" class="tab active">Shortcuts</button>
+      <button id="tabBundle" class="tab">New Bundle</button>
+      <button id="tabSettings" class="tab">Settings</button>
+    </nav>
+
+    <!-- Shortcuts panel -->
+    <section id="panelShortcuts">
+      <div class="add-redirect">
+        <input id="redirectKey" type="text" autocomplete="off" placeholder="keyword" />
+        <input id="redirectUrl" type="text" placeholder="google.com or https://..." />
+        <button type="button" id="saveRedirect">+ Add Redirect</button>
+        <div id="addRedirectStatus"></div>
+      </div>
+      <div id="count"></div>
+      <ul id="shortcutList"></ul>
+    </section>
+
+    <!-- Bundle creation panel -->
+    <section id="panelBundle" hidden>
+      <form id="bundleForm">
+        <label for="bundleKey">Keyword</label>
+        <input id="bundleKey" type="text" autocomplete="off" placeholder="e.g. work" />
+
+        <label for="bundleLabel">Label (optional)</label>
+        <input id="bundleLabel" type="text" placeholder="e.g. Work tabs" />
+
+        <label>URLs <span style="color:#999;font-size:11px">(at least 2)</span></label>
+        <div id="urlList">
+          <div class="url-row">
+            <input type="text" class="url-input" placeholder="google.com or https://..." />
+          </div>
+          <div class="url-row">
+            <input type="text" class="url-input" placeholder="google.com or https://..." />
+            <button type="button" class="remove-url" title="Remove">×</button>
+          </div>
+        </div>
+
+        <button type="button" id="addUrl">+ Add URL</button>
+        <button type="submit" id="saveBundle">Save Bundle</button>
+        <div id="bundleStatus" role="status"></div>
+      </form>
+    </section>
+
+    <!-- Settings panel -->
+    <section id="panelSettings" hidden>
+      <h2>Keyboard Shortcuts</h2>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Open popup</span>
+        <span id="shortcutPopup" class="shortcut-key">—</span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Open side panel</span>
+        <span id="shortcutPanel" class="shortcut-key">—</span>
+      </div>
+      <button type="button" id="customizeShortcut">Customize shortcuts ↗</button>
+
+      <h2>Shortcut Limit</h2>
+      <label for="maxShortcutsInput">Max shortcuts (1–5000)</label>
+      <div class="settings-row">
+        <input id="maxShortcutsInput" type="number" min="1" max="5000" step="1" />
+        <button type="button" id="saveMaxShortcuts">Save</button>
+      </div>
+      <div id="settingsStatus" role="status"></div>
+    </section>
+
+    <script type="module" src="./sidepanel.ts"></script>
+  </body>
+</html>

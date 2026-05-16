@@ -8,7 +8,8 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       crx({
-        manifest: createManifest(browser),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        manifest: createManifest(browser) as any,
       }),
     ],
     build: {

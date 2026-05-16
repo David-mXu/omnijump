@@ -1,6 +1,7 @@
-import { DEFAULT_SETTINGS, Shortcut, ShortcutStore } from './types';
+import { DEFAULT_SETTINGS, Shortcut, ShortcutStore, UserSettings } from './types';
 
-export const STORAGE_KEY = 'omnibarShortcuts';
+export const SETTINGS_KEY = 'omnibar_settings';
+export const SHORTCUT_PREFIX = 'omnibar_s_';
 
 export function normalizeKey(input: string): string {
   return input
@@ -10,24 +11,21 @@ export function normalizeKey(input: string): string {
     .replace(/[^a-z0-9-]/g, '');
 }
 
-export function createDefaultStore(): ShortcutStore {
-  return {
-    shortcuts: {},
-    settings: DEFAULT_SETTINGS,
-  };
-}
-
 export async function getStore(): Promise<ShortcutStore> {
-  const result = await chrome.storage.sync.get(STORAGE_KEY);
-  const store = (result[STORAGE_KEY] ?? createDefaultStore()) as ShortcutStore;
-  return {
-    shortcuts: store.shortcuts ?? {},
-    settings: store.settings ?? DEFAULT_SETTINGS,
-  };
-}
+  const all = await chrome.storage.sync.get(null);
+  const shortcuts: Record<string, Shortcut> = {};
+  let settings: UserSettings = DEFAULT_SETTINGS;
 
-export async function setStore(store: ShortcutStore): Promise<void> {
-  await chrome.storage.sync.set({ [STORAGE_KEY]: store });
+  for (const [k, v] of Object.entries(all)) {
+    if (k === SETTINGS_KEY) {
+      settings = { ...DEFAULT_SETTINGS, ...(v as UserSettings) };
+    } else if (k.startsWith(SHORTCUT_PREFIX)) {
+      const shortcut = v as Shortcut;
+      shortcuts[shortcut.key] = shortcut;
+    }
+  }
+
+  return { shortcuts, settings };
 }
 
 export async function upsertShortcut(shortcut: Shortcut): Promise<ShortcutStore> {
@@ -38,27 +36,72 @@ export async function upsertShortcut(shortcut: Shortcut): Promise<ShortcutStore>
     throw new Error('Shortcut key is empty after normalization.');
   }
 
-  const existingCount = Object.keys(store.shortcuts).length;
   const isNew = !store.shortcuts[key];
   const max = store.settings.maxShortcuts ?? DEFAULT_SETTINGS.maxShortcuts;
 
-  if (isNew && existingCount >= max) {
+  if (isNew && Object.keys(store.shortcuts).length >= max) {
     throw new Error(`Shortcut limit reached (${max}).`);
   }
 
-  store.shortcuts[key] = {
-    ...shortcut,
-    key,
-  };
+  let normalized = { ...shortcut, key };
+  if (normalized.type === 'bundle' && normalized.bundleUrls?.length) {
+    normalized = { ...normalized, url: normalized.bundleUrls[0] };
+  }
 
-  await setStore(store);
+  try {
+    await chrome.storage.sync.set({ [`${SHORTCUT_PREFIX}${key}`]: normalized });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('QUOTA_BYTES') || msg.toLowerCase().includes('quota')) {
+      throw new Error('Storage quota exceeded. Delete some shortcuts to free up space.');
+    }
+    throw err;
+  }
+
+  store.shortcuts[key] = normalized;
   return store;
+}
+
+export async function saveSettings(settings: UserSettings): Promise<void> {
+  await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
+}
+
+// One-time migration from the old single-key format (both sync and local) to per-key sync storage.
+export async function migrateFromLegacyStorage(): Promise<void> {
+  const LEGACY_KEY = 'omnibarShortcuts';
+
+  const [syncResult, localResult] = await Promise.all([
+    chrome.storage.sync.get(LEGACY_KEY),
+    chrome.storage.local.get(LEGACY_KEY),
+  ]);
+
+  const legacyStore =
+    (syncResult[LEGACY_KEY] ?? localResult[LEGACY_KEY]) as
+    | { shortcuts?: Record<string, Shortcut>; settings?: UserSettings }
+    | undefined;
+
+  if (!legacyStore?.shortcuts) return;
+
+  const writes: Record<string, Shortcut> = {};
+  for (const shortcut of Object.values(legacyStore.shortcuts)) {
+    const key = normalizeKey(shortcut.key);
+    if (key) writes[`${SHORTCUT_PREFIX}${key}`] = { ...shortcut, key };
+  }
+
+  if (Object.keys(writes).length > 0) {
+    await chrome.storage.sync.set(writes);
+  }
+
+  await Promise.all([
+    chrome.storage.sync.remove(LEGACY_KEY),
+    chrome.storage.local.remove(LEGACY_KEY),
+  ]);
 }
 
 export async function deleteShortcut(key: string): Promise<ShortcutStore> {
   const store = await getStore();
   const normalized = normalizeKey(key);
+  await chrome.storage.sync.remove(`${SHORTCUT_PREFIX}${normalized}`);
   delete store.shortcuts[normalized];
-  await setStore(store);
   return store;
 }

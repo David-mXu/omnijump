@@ -27,7 +27,10 @@ async function render(): Promise<void> {
 
     const url = document.createElement('div');
     url.className = 'url';
-    url.textContent = shortcut.url;
+    url.textContent =
+      shortcut.type === 'bundle'
+        ? `Bundle — ${shortcut.bundleUrls?.length ?? 0} URLs`
+        : shortcut.url;
 
     const button = document.createElement('button');
     button.type = 'button';

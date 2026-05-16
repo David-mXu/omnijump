@@ -1,5 +1,11 @@
-import { upsertShortcut } from './storage';
+import { getStore, upsertShortcut } from './storage';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
+
+function normalizeUrl(input: string): string {
+  const s = input.trim();
+  if (!s || /^https?:\/\//i.test(s)) return s;
+  return `https://${s}`;
+}
 
 const form = document.getElementById('shortcutForm') as HTMLFormElement | null;
 const keyInput = document.getElementById('shortcutKey') as HTMLInputElement | null;
@@ -37,7 +43,7 @@ form?.addEventListener('submit', async (event) => {
 	}
 
 	const key = keyInput.value.trim();
-	const url = urlInput.value.trim();
+	const url = normalizeUrl(urlInput.value);
 
 	if (!key || !url) {
 		setStatus('Enter a keyword and URL.');
@@ -45,10 +51,8 @@ form?.addEventListener('submit', async (event) => {
 	}
 
 	try {
-		const store = await chrome.storage.sync.get('omnibarShortcuts');
-		const existingKeys = new Set<string>(
-			Object.keys(store.omnibarShortcuts?.shortcuts ?? {})
-		);
+		const store = await getStore();
+		const existingKeys = new Set<string>(Object.keys(store.shortcuts));
 		const unique = uniqueKey(key, existingKeys);
 
 		await upsertShortcut({
@@ -65,3 +69,11 @@ form?.addEventListener('submit', async (event) => {
 });
 
 init();
+
+document.getElementById('openPanel')?.addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id !== undefined) {
+    await chrome.sidePanel.open({ tabId: tab.id });
+  }
+  window.close();
+});
