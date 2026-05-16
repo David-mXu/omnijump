@@ -242,6 +242,14 @@ saveMaxBtn.addEventListener('click', async () => {
   settingsStatusEl.className = 'success';
 });
 
+// ── Toggle close via keyboard shortcut ───────────────────────────────────────
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type === 'close-panel') {
+    sendResponse({ closed: true });
+    window.close();
+  }
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 render();
 initRedirectForm();

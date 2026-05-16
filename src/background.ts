@@ -141,16 +141,23 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
-chrome.commands.onCommand.addListener(async (command, tab) => {
+chrome.commands.onCommand.addListener((command, tab) => {
   if (command !== 'open-side-panel') return;
-  if (tab?.id !== undefined) {
-    await chrome.sidePanel.open({ tabId: tab.id });
-  } else {
-    const win = await chrome.windows.getCurrent();
-    if (win?.id !== undefined) {
-      await chrome.sidePanel.open({ windowId: win.id });
+
+  // Try to close the panel if it is already open.
+  // If no extension page is listening, lastError fires and we open instead.
+  chrome.runtime.sendMessage({ type: 'close-panel' }, async () => {
+    if (chrome.runtime.lastError) {
+      if (tab?.id !== undefined) {
+        await chrome.sidePanel.open({ tabId: tab.id });
+      } else {
+        const win = await chrome.windows.getCurrent();
+        if (win?.id !== undefined) {
+          await chrome.sidePanel.open({ windowId: win.id });
+        }
+      }
     }
-  }
+  });
 });
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
