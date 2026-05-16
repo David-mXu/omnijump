@@ -1,11 +1,6 @@
-import { deleteShortcut, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
+import { getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
+import { buildShortcutRow, normalizeUrl } from './ui';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
-
-function normalizeUrl(input: string): string {
-  const s = input.trim();
-  if (!s || /^https?:\/\//i.test(s)) return s;
-  return `https://${s}`;
-}
 
 // ── Tab elements ──────────────────────────────────────────────────────────────
 const tabShortcutsBtn = document.getElementById('tabShortcuts') as HTMLButtonElement;
@@ -17,6 +12,7 @@ const panelSettings = document.getElementById('panelSettings') as HTMLElement;
 
 // ── Shortcuts panel ───────────────────────────────────────────────────────────
 const listEl = document.getElementById('shortcutList') as HTMLUListElement;
+const emptyStateEl = document.getElementById('emptyState') as HTMLDivElement;
 const countEl = document.getElementById('count') as HTMLDivElement;
 const redirectKeyInput = document.getElementById('redirectKey') as HTMLInputElement;
 const redirectUrlInput = document.getElementById('redirectUrl') as HTMLInputElement;
@@ -54,7 +50,7 @@ function showTab(name: TabName): void {
 tabShortcutsBtn.addEventListener('click', () => showTab('shortcuts'));
 tabBundleBtn.addEventListener('click', () => showTab('bundle'));
 
-// ── Shortcuts list render ─────────────────────────────────────────────────────
+// ── Shortcut list ─────────────────────────────────────────────────────────────
 async function render(): Promise<void> {
   const store = await getStore();
   const shortcuts = Object.values(store.shortcuts);
@@ -62,41 +58,11 @@ async function render(): Promise<void> {
   countEl.textContent = `${shortcuts.length} / ${store.settings.maxShortcuts}`;
   listEl.innerHTML = '';
 
-  shortcuts.forEach((shortcut) => {
-    const li = document.createElement('li');
-    const item = document.createElement('div');
-    item.className = 'item';
+  const isEmpty = shortcuts.length === 0;
+  emptyStateEl.hidden = !isEmpty;
+  listEl.hidden = isEmpty;
 
-    const keyLine = document.createElement('div');
-    keyLine.className = 'key';
-    keyLine.textContent = shortcut.label ?? shortcut.key;
-
-    if (shortcut.type === 'bundle') {
-      const badge = document.createElement('span');
-      badge.className = 'badge';
-      badge.textContent = 'bundle';
-      keyLine.appendChild(badge);
-    }
-
-    const urlLine = document.createElement('div');
-    urlLine.className = 'url';
-    urlLine.textContent =
-      shortcut.type === 'bundle'
-        ? `${shortcut.bundleUrls?.length ?? 0} URLs — key: ${shortcut.key}`
-        : shortcut.url;
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.textContent = 'Delete';
-    deleteBtn.addEventListener('click', async () => {
-      await deleteShortcut(shortcut.key);
-      await render();
-    });
-
-    item.append(keyLine, urlLine);
-    li.append(item, deleteBtn);
-    listEl.appendChild(li);
-  });
+  shortcuts.forEach((shortcut) => listEl.appendChild(buildShortcutRow(shortcut, render)));
 }
 
 // ── Add Redirect form ─────────────────────────────────────────────────────────
@@ -126,14 +92,8 @@ saveRedirectBtn.addEventListener('click', async () => {
   const key = normalizeKey(redirectKeyInput.value);
   const url = normalizeUrl(redirectUrlInput.value);
 
-  if (!key) {
-    setRedirectStatus('Enter a keyword.', 'error');
-    return;
-  }
-  if (!url) {
-    setRedirectStatus('Enter a URL.', 'error');
-    return;
-  }
+  if (!key) { setRedirectStatus('Enter a keyword.', 'error'); return; }
+  if (!url) { setRedirectStatus('Enter a URL.', 'error'); return; }
 
   try {
     await upsertShortcut({ key, url, type: 'redirect' });
@@ -180,14 +140,8 @@ bundleForm.addEventListener('submit', async (event) => {
     .map((i) => normalizeUrl(i.value))
     .filter(Boolean);
 
-  if (!key) {
-    setBundleStatus('Enter a keyword.', 'error');
-    return;
-  }
-  if (urls.length < 2) {
-    setBundleStatus('Add at least 2 URLs.', 'error');
-    return;
-  }
+  if (!key) { setBundleStatus('Enter a keyword.', 'error'); return; }
+  if (urls.length < 2) { setBundleStatus('Add at least 2 URLs.', 'error'); return; }
 
   try {
     await upsertShortcut({ key, url: urls[0], type: 'bundle', bundleUrls: urls, label });
@@ -240,14 +194,6 @@ saveMaxBtn.addEventListener('click', async () => {
   await saveSettings(store.settings);
   settingsStatusEl.textContent = 'Saved.';
   settingsStatusEl.className = 'success';
-});
-
-// ── Toggle close via keyboard shortcut ───────────────────────────────────────
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message.type === 'close-panel') {
-    sendResponse({ closed: true });
-    window.close();
-  }
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────

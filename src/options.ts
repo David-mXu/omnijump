@@ -1,49 +1,22 @@
-import { deleteShortcut, getStore } from './storage';
+import { getStore } from './storage';
+import { buildShortcutRow } from './ui';
 
-const listEl = document.getElementById('shortcutList') as HTMLUListElement | null;
-const countEl = document.getElementById('count') as HTMLDivElement | null;
+const listEl = document.getElementById('shortcutList') as HTMLUListElement;
+const emptyStateEl = document.getElementById('emptyState') as HTMLDivElement;
+const countEl = document.getElementById('count') as HTMLDivElement;
 
 async function render(): Promise<void> {
   const store = await getStore();
   const shortcuts = Object.values(store.shortcuts);
 
-  if (countEl) {
-    countEl.textContent = `${shortcuts.length} / ${store.settings.maxShortcuts}`;
-  }
-
-  if (!listEl) {
-    return;
-  }
-
+  countEl.textContent = `${shortcuts.length} / ${store.settings.maxShortcuts}`;
   listEl.innerHTML = '';
-  shortcuts.forEach((shortcut) => {
-    const li = document.createElement('li');
-    const item = document.createElement('div');
-    item.className = 'item';
 
-    const key = document.createElement('div');
-    key.className = 'key';
-    key.textContent = shortcut.key;
+  const isEmpty = shortcuts.length === 0;
+  emptyStateEl.hidden = !isEmpty;
+  listEl.hidden = isEmpty;
 
-    const url = document.createElement('div');
-    url.className = 'url';
-    url.textContent =
-      shortcut.type === 'bundle'
-        ? `Bundle — ${shortcut.bundleUrls?.length ?? 0} URLs`
-        : shortcut.url;
-
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = 'Delete';
-    button.addEventListener('click', async () => {
-      await deleteShortcut(shortcut.key);
-      await render();
-    });
-
-    item.append(key, url);
-    li.append(item, button);
-    listEl.appendChild(li);
-  });
+  shortcuts.forEach((shortcut) => listEl.appendChild(buildShortcutRow(shortcut, render)));
 }
 
 render();

@@ -5,51 +5,133 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Omnibar Shortcuts</title>
     <style>
+      *, *::before, *::after { box-sizing: border-box; }
       body {
         margin: 0;
         font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        padding: 24px;
+        font-size: 13px;
+        color: #222;
+        padding: 28px 32px;
+        max-width: 680px;
       }
+
+      /* ── Header ───────────────────────────────────────────────────────────── */
       header {
         display: flex;
-        align-items: center;
+        align-items: baseline;
         justify-content: space-between;
+        margin-bottom: 20px;
+        border-bottom: 1px solid #e8e8e8;
+        padding-bottom: 14px;
       }
-      h1 {
-        font-size: 18px;
-        margin: 0;
-      }
-      #count {
+      h1 { font-size: 17px; margin: 0; font-weight: 600; color: #111; }
+      #count { font-size: 12px; color: #999; }
+
+      /* ── Inputs ───────────────────────────────────────────────────────────── */
+      input[type="text"] {
+        width: 100%;
+        padding: 6px 8px;
         font-size: 12px;
-        color: #555;
+        border: 1px solid #d0d0d0;
+        border-radius: 4px;
+        outline: none;
       }
-      ul {
-        list-style: none;
-        padding: 0;
-        margin: 16px 0 0;
+      input:focus {
+        border-color: #4c6ef5;
+        box-shadow: 0 0 0 2px rgba(76, 110, 245, 0.18);
       }
-      li {
+
+      /* ── Buttons ──────────────────────────────────────────────────────────── */
+      button { cursor: pointer; border-radius: 4px; font-size: 12px; }
+      .btn-primary {
+        background: #4c6ef5; color: white; border: none; padding: 6px 12px;
+      }
+      .btn-primary:hover { background: #3b5de0; }
+      .btn-secondary {
+        background: none; color: #555; border: 1px solid #d0d0d0; padding: 6px 10px;
+      }
+      .btn-secondary:hover { background: #f5f5f5; }
+      .btn-sm { padding: 4px 10px; font-size: 11px; }
+
+      /* ── Icon buttons (appear on row hover) ──────────────────────────────── */
+      .btn-icon {
+        background: none;
+        border: none;
+        padding: 3px 6px;
+        border-radius: 3px;
+        color: #bbb;
+        font-size: 15px;
+        line-height: 1;
+        opacity: 0;
+        transition: opacity 0.1s;
+        flex-shrink: 0;
+      }
+      li:hover .btn-icon { opacity: 1; }
+      li.editing .btn-icon { opacity: 0 !important; }
+      .btn-icon:hover { color: #555; background: #f0f0f0; }
+      .btn-icon.danger:hover { color: #c0392b; background: #fdecea; }
+
+      /* ── Shortcut list ────────────────────────────────────────────────────── */
+      ul { list-style: none; padding: 0; margin: 0; }
+      li { border-bottom: 1px solid #f0f0f0; }
+
+      .display-row {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        padding: 8px 0;
-        border-bottom: 1px solid #eee;
-        gap: 12px;
+        gap: 8px;
+        padding: 10px 0;
       }
-      .item {
-        flex: 1;
-      }
+      .item { flex: 1; min-width: 0; }
       .key {
+        font-family: monospace;
+        font-size: 13px;
         font-weight: 600;
+        color: #222;
+      }
+      .badge {
+        display: inline-block;
+        font-size: 10px;
+        padding: 1px 5px;
+        border-radius: 10px;
+        background: #e8eeff;
+        color: #4c6ef5;
+        margin-left: 5px;
+        vertical-align: middle;
+        font-family: system-ui;
       }
       .url {
-        color: #555;
+        color: #888;
         font-size: 12px;
-        word-break: break-all;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-top: 2px;
       }
-      button {
-        padding: 6px 10px;
-        font-size: 12px;
+
+      /* ── Inline edit ──────────────────────────────────────────────────────── */
+      .edit-form {
+        display: none;
+        flex-direction: column;
+        gap: 6px;
+        padding: 10px 0;
+      }
+      li.editing .display-row { display: none; }
+      li.editing .edit-form { display: flex; }
+      .edit-actions { display: flex; gap: 6px; }
+      .edit-status { font-size: 11px; color: #c0392b; min-height: 14px; }
+
+      /* ── Empty state ──────────────────────────────────────────────────────── */
+      .empty-state {
+        text-align: center;
+        padding: 60px 0;
+        color: #bbb;
+        font-size: 13px;
+      }
+      .empty-state strong {
+        display: block;
+        color: #999;
+        margin-bottom: 6px;
+        font-size: 15px;
       }
     </style>
   </head>
@@ -58,6 +140,10 @@
       <h1>Omnibar Shortcuts</h1>
       <div id="count"></div>
     </header>
+    <div id="emptyState" class="empty-state" hidden>
+      <strong>No shortcuts yet</strong>
+      Use the popup or side panel to add your first shortcut.
+    </div>
     <ul id="shortcutList"></ul>
     <script type="module" src="./options.ts"></script>
   </body>
