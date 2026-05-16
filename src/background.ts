@@ -141,23 +141,27 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
+// Tracks whether the side panel is currently open.
+// Reset on service-worker restart (worst case: next shortcut press opens the panel).
+let panelOpen = false;
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === 'panel-opened') panelOpen = true;
+});
+
 chrome.commands.onCommand.addListener((command, tab) => {
   if (command !== 'open-side-panel') return;
 
-  // Try to close the panel if it is already open.
-  // If no extension page is listening, lastError fires and we open instead.
-  chrome.runtime.sendMessage({ type: 'close-panel' }, async () => {
-    if (chrome.runtime.lastError) {
-      if (tab?.id !== undefined) {
-        await chrome.sidePanel.open({ tabId: tab.id });
-      } else {
-        const win = await chrome.windows.getCurrent();
-        if (win?.id !== undefined) {
-          await chrome.sidePanel.open({ windowId: win.id });
-        }
-      }
+  if (panelOpen) {
+    // Close: no user gesture required for window.close() in the panel.
+    chrome.runtime.sendMessage({ type: 'close-panel' });
+    panelOpen = false;
+  } else {
+    // Open: must happen before any await to keep the user-gesture context alive.
+    if (tab?.id !== undefined) {
+      chrome.sidePanel.open({ tabId: tab.id });
     }
-  });
+  }
 });
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
