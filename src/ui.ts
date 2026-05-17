@@ -152,6 +152,20 @@ export function buildShortcutRow(
   editActions.append(saveBtn, cancelBtn);
   editForm.append(keyInput, secondInput, editActions, editStatus);
 
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.className = 'select-cb';
+  cb.dataset.key = shortcut.key;
+
+  displayRow.prepend(cb);
+
+  displayRow.addEventListener('click', (e) => {
+    if (!li.closest('ul')?.classList.contains('selecting')) return;
+    if (e.target === cb) return;
+    cb.checked = !cb.checked;
+    cb.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
   li.append(displayRow, editForm);
   return li;
 }

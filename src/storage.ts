@@ -43,7 +43,13 @@ export async function upsertShortcut(shortcut: Shortcut): Promise<ShortcutStore>
     throw new Error(`Shortcut limit reached (${max}).`);
   }
 
-  let normalized = { ...shortcut, key };
+  const existing = store.shortcuts[key];
+  let normalized: Shortcut = {
+    ...shortcut,
+    key,
+    createdAt: isNew ? Date.now() : existing?.createdAt,
+    lastUsed: isNew ? undefined : existing?.lastUsed,
+  };
   if (normalized.type === 'bundle' && normalized.bundleUrls?.length) {
     normalized = { ...normalized, url: normalized.bundleUrls[0] };
   }
@@ -104,4 +110,34 @@ export async function deleteShortcut(key: string): Promise<ShortcutStore> {
   await chrome.storage.sync.remove(`${SHORTCUT_PREFIX}${normalized}`);
   delete store.shortcuts[normalized];
   return store;
+}
+
+export async function touchShortcut(key: string): Promise<void> {
+  const normalized = normalizeKey(key);
+  const storageKey = `${SHORTCUT_PREFIX}${normalized}`;
+  const result = await chrome.storage.sync.get(storageKey);
+  const shortcut = result[storageKey] as Shortcut | undefined;
+  if (shortcut) {
+    await chrome.storage.sync.set({ [storageKey]: { ...shortcut, lastUsed: Date.now() } });
+  }
+}
+
+export async function cleanupStaleShortcuts(): Promise<void> {
+  const store = await getStore();
+  if (!store.settings.staleAutoDelete) return;
+
+  const cutoff = Date.now() - store.settings.staleDays * 86_400_000;
+  const toGrace: Record<string, Shortcut> = {};
+
+  for (const [key, shortcut] of Object.entries(store.shortcuts)) {
+    if (shortcut.lastUsed === undefined) {
+      toGrace[`${SHORTCUT_PREFIX}${key}`] = { ...shortcut, lastUsed: Date.now() };
+    } else if (shortcut.lastUsed < cutoff) {
+      await deleteShortcut(key);
+    }
+  }
+
+  if (Object.keys(toGrace).length) {
+    await chrome.storage.sync.set(toGrace);
+  }
 }

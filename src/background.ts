@@ -1,6 +1,7 @@
 import { rebuildDynamicRules } from './dnr';
-import { SETTINGS_KEY, SHORTCUT_PREFIX, getStore, migrateFromLegacyStorage, normalizeKey, upsertShortcut } from './storage';
+import { SETTINGS_KEY, SHORTCUT_PREFIX, cleanupStaleShortcuts, getStore, migrateFromLegacyStorage, normalizeKey, touchShortcut, upsertShortcut } from './storage';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
+import { ShortcutStore, Suggestion } from './types';
 
 async function syncRules(): Promise<void> {
   try {
@@ -11,6 +12,43 @@ async function syncRules(): Promise<void> {
 }
 
 const TIP_THRESHOLD = 3;
+
+const SEARCH_PARAMS = ['q', 'query', 'search_query', 'search', 'k', 'keyword', 's', 'text'];
+
+function detectSearch(url: string): { param: string; baseUrl: string } | null {
+  try {
+    const parsed = new URL(url);
+    for (const param of SEARCH_PARAMS) {
+      if (parsed.searchParams.has(param)) {
+        const base = new URL(parsed.href);
+        base.search = '';
+        return { param, baseUrl: `${base.href}?${param}=` };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+const SITE_NAMES: Record<string, string> = {
+  amazon: 'Amazon', youtube: 'YouTube', github: 'GitHub',
+  reddit: 'Reddit', twitter: 'Twitter', x: 'X',
+  google: 'Google', bing: 'Bing', duckduckgo: 'DuckDuckGo',
+  stackoverflow: 'Stack Overflow', wikipedia: 'Wikipedia',
+  ebay: 'eBay', etsy: 'Etsy', netflix: 'Netflix',
+};
+
+function formatSiteName(host: string): string {
+  const base = host.split('.')[0];
+  return SITE_NAMES[base] ?? (base.charAt(0).toUpperCase() + base.slice(1));
+}
+
+async function buildSuggestedKey(host: string, store: ShortcutStore): Promise<string> {
+  const existing = new Set(Object.keys(store.shortcuts));
+  const base = suggestKeyFromUrl(`https://${host}/`) ?? host.slice(0, 2);
+  return uniqueKey(base, existing);
+}
 
 async function shouldHandleBundle(tabId: number): Promise<boolean> {
   const now = Date.now();
@@ -61,35 +99,88 @@ async function handleBundleNavigation(url: string, tabId: number): Promise<void>
   );
 }
 
+async function finalizeTabSession(
+  tabId: number,
+  session: { host: string; param: string; baseUrl: string }
+): Promise<void> {
+  const r = await chrome.storage.session.get('searchVisitCounts');
+  const counts = (r.searchVisitCounts ?? {}) as Record<string, number>;
+  const key = `${session.host}|${session.param}`;
+  counts[key] = (counts[key] ?? 0) + 1;
+  await chrome.storage.session.set({ searchVisitCounts: counts });
+}
+
 async function handleSmartTip(url: string, tabId: number): Promise<void> {
-  const query = extractQuery(url);
-  if (!query) {
+  const hit = detectSearch(url);
+  const parsed = hit ? new URL(url) : null;
+  const host = parsed?.hostname.replace(/^www\./, '') ?? null;
+
+  console.log('[SmartTip] url:', url, '| hit:', hit, '| host:', host, '| tabId:', tabId);
+
+  const sessRes = await chrome.storage.session.get('tabActiveSessions');
+  const sessions = (sessRes.tabActiveSessions ?? {}) as Record<number, { host: string; param: string; baseUrl: string } | null>;
+  const prev = sessions[tabId] ?? null;
+
+  console.log('[SmartTip] prev session:', prev);
+
+  if (prev && prev.host !== host) {
+    console.log('[SmartTip] host changed, finalizing prev session');
+    await finalizeTabSession(tabId, prev);
+    sessions[tabId] = null;
+  }
+
+  if (!hit || !host) {
+    sessions[tabId] = null;
+    await chrome.storage.session.set({ tabActiveSessions: sessions });
     await chrome.action.setBadgeText({ tabId, text: '' });
+    await chrome.storage.session.remove(`suggestion_${tabId}`);
     return;
   }
 
   const store = await getStore();
-  const normalized = normalizeKey(query);
-  if (store.shortcuts[normalized]) {
+  const alreadyCovered = Object.values(store.shortcuts).some(
+    (s) => s.url.startsWith(hit.baseUrl)
+  );
+  if (alreadyCovered) {
+    console.log('[SmartTip] already covered, skipping');
+    sessions[tabId] = null;
+    await chrome.storage.session.set({ tabActiveSessions: sessions });
     await chrome.action.setBadgeText({ tabId, text: '' });
     return;
   }
 
-  const host = new URL(url).hostname;
-  const countKey = `${host}|${normalized}`;
-  const result = await chrome.storage.session.get('searchCounts');
-  const counts = (result.searchCounts ?? {}) as Record<string, number>;
-  counts[countKey] = (counts[countKey] ?? 0) + 1;
-  await chrome.storage.session.set({ searchCounts: counts });
+  if (!prev || prev.host !== host) {
+    sessions[tabId] = { host, param: hit.param, baseUrl: hit.baseUrl };
+    await chrome.storage.session.set({ tabActiveSessions: sessions });
+    console.log('[SmartTip] new session started for', host);
+  }
 
-  if (counts[countKey] >= TIP_THRESHOLD) {
-    await chrome.action.setBadgeBackgroundColor({ tabId, color: '#4c6ef5' });
+  const countRes = await chrome.storage.session.get('searchVisitCounts');
+  const counts = (countRes.searchVisitCounts ?? {}) as Record<string, number>;
+  const countKey = `${host}|${hit.param}`;
+  const total = (counts[countKey] ?? 0) + 1;
+
+  console.log('[SmartTip] visit counts:', counts, '| total (completed+1):', total, '| threshold:', TIP_THRESHOLD);
+
+  if (total >= TIP_THRESHOLD) {
+    const siteName = formatSiteName(host);
+    const key = await buildSuggestedKey(host, store);
+    const suggestion: Suggestion = { key, url: hit.baseUrl, siteName };
+    await chrome.storage.session.set({ [`suggestion_${tabId}`]: suggestion });
+    await chrome.action.setBadgeBackgroundColor({ color: '#4c6ef5' });
     await chrome.action.setBadgeText({ tabId, text: 'TIP' });
+    console.log('[SmartTip] TIP badge shown for', host);
   }
 }
 
+chrome.runtime.onStartup.addListener(async () => {
+  await cleanupStaleShortcuts();
+  syncRules();
+});
+
 chrome.runtime.onInstalled.addListener(async () => {
   await migrateFromLegacyStorage();
+  await cleanupStaleShortcuts();
   syncRules();
 
   chrome.contextMenus.removeAll(() => {
@@ -164,12 +255,34 @@ chrome.commands.onCommand.addListener((command, tab) => {
   }
 });
 
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  console.log('[TabRemoved] tab closed:', tabId);
+  const r = await chrome.storage.session.get('tabActiveSessions');
+  const sessions = (r.tabActiveSessions ?? {}) as Record<number, { host: string; param: string; baseUrl: string } | null>;
+  const session = sessions[tabId];
+  console.log('[TabRemoved] session to finalize:', session);
+  if (session) await finalizeTabSession(tabId, session);
+  delete sessions[tabId];
+  await chrome.storage.session.set({ tabActiveSessions: sessions });
+});
+
+async function handleShortcutTouch(url: string): Promise<void> {
+  const query = extractQuery(url);
+  if (!query) return;
+  const store = await getStore();
+  const normalized = normalizeKey(query);
+  if (store.shortcuts[normalized]) {
+    await touchShortcut(normalized);
+  }
+}
+
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (details.frameId !== 0 || !details.url || details.tabId < 0) {
     return;
   }
 
   void handleBundleNavigation(details.url, details.tabId);
+  void handleShortcutTouch(details.url);
 });
 
 chrome.webNavigation.onCommitted.addListener((details) => {

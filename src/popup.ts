@@ -1,5 +1,6 @@
 import { getStore, upsertShortcut } from './storage';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
+import { Suggestion } from './types';
 
 function normalizeUrl(input: string): string {
   const s = input.trim();
@@ -18,6 +19,33 @@ function setStatus(message: string): void {
 	}
 }
 
+function showSuggestion(s: Suggestion, tabId: number): void {
+  const el = document.getElementById('suggestion');
+  const text = document.getElementById('suggestionText');
+  if (!el || !text) return;
+
+  text.textContent = `You often search ${s.siteName}. Save "${s.key}" as a shortcut?`;
+  el.hidden = false;
+
+  document.getElementById('saveSuggestion')?.addEventListener('click', async () => {
+    try {
+      await upsertShortcut({ key: s.key, url: s.url, type: 'redirect' });
+      await chrome.storage.session.remove(`suggestion_${tabId}`);
+      await chrome.action.setBadgeText({ tabId, text: '' });
+      el.hidden = true;
+      setStatus(`Saved "${s.key}".`);
+    } catch (err) {
+      setStatus((err as Error).message);
+    }
+  });
+
+  document.getElementById('dismissSuggestion')?.addEventListener('click', async () => {
+    await chrome.storage.session.remove(`suggestion_${tabId}`);
+    await chrome.action.setBadgeText({ tabId, text: '' });
+    el.hidden = true;
+  });
+}
+
 async function init(): Promise<void> {
 	try {
 		const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -29,6 +57,11 @@ async function init(): Promise<void> {
 				keyInput.focus();
 				keyInput.select();
 			}
+		}
+		if (tab?.id !== undefined) {
+			const result = await chrome.storage.session.get(`suggestion_${tab.id}`);
+			const suggestion = result[`suggestion_${tab.id}`] as Suggestion | undefined;
+			if (suggestion) showSuggestion(suggestion, tab.id);
 		}
 	} catch (error) {
 		setStatus('Failed to read active tab.');

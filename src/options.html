@@ -133,17 +133,53 @@
         margin-bottom: 6px;
         font-size: 15px;
       }
+
+      /* ── Filter + list header ─────────────────────────────────────────────── */
+      #filterInput {
+        width: 100%;
+        margin-bottom: 10px;
+        padding: 6px 10px;
+        font-size: 13px;
+        border: 1px solid #d0d0d0;
+        border-radius: 4px;
+        outline: none;
+      }
+      #filterInput:focus { border-color: #4c6ef5; box-shadow: 0 0 0 2px rgba(76,110,245,0.18); }
+      .list-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+      .list-actions { display: flex; gap: 8px; }
+
+      /* ── Multi-select ─────────────────────────────────────────────────────── */
+      .select-cb { display: none; accent-color: #4c6ef5; flex-shrink: 0; }
+      ul.selecting li { cursor: pointer; }
+      ul.selecting li .select-cb { display: inline-block; }
+      ul.selecting li .btn-icon { display: none !important; }
+      ul.selecting li.editing .edit-form { display: none; }
+      ul.selecting li.editing .display-row { display: flex; }
+      ul.selecting li:has(.select-cb:checked) { background: #f0f3ff; }
     </style>
   </head>
   <body>
     <header>
       <h1>Omnibar Shortcuts</h1>
-      <div id="count"></div>
     </header>
+    <input id="filterInput" type="search" placeholder="Filter shortcuts…" hidden>
+    <div class="list-header">
+      <div id="count"></div>
+      <div class="list-actions">
+        <button type="button" id="selectToggle" class="btn-secondary btn-sm">Select</button>
+        <button type="button" id="deleteSelected" class="btn-primary btn-sm" hidden>Delete (0)</button>
+      </div>
+    </div>
     <div id="emptyState" class="empty-state" hidden>
       <strong>No shortcuts yet</strong>
       Use the popup or side panel to add your first shortcut.
     </div>
+    <div id="noResults" class="empty-state" hidden>No shortcuts match your filter.</div>
     <ul id="shortcutList"></ul>
     <script type="module" src="./options.ts"></script>
   </body>

@@ -1,6 +1,7 @@
-import { getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
+import { SETTINGS_KEY, SHORTCUT_PREFIX, deleteShortcut, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
 import { buildShortcutRow, normalizeUrl } from './ui';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
+import { Suggestion } from './types';
 
 // ── Tab elements ──────────────────────────────────────────────────────────────
 const tabShortcutsBtn = document.getElementById('tabShortcuts') as HTMLButtonElement;
@@ -13,7 +14,11 @@ const panelSettings = document.getElementById('panelSettings') as HTMLElement;
 // ── Shortcuts panel ───────────────────────────────────────────────────────────
 const listEl = document.getElementById('shortcutList') as HTMLUListElement;
 const emptyStateEl = document.getElementById('emptyState') as HTMLDivElement;
+const noResultsEl = document.getElementById('noResults') as HTMLDivElement;
 const countEl = document.getElementById('count') as HTMLDivElement;
+const filterInput = document.getElementById('filterInput') as HTMLInputElement;
+const selectToggleBtn = document.getElementById('selectToggle') as HTMLButtonElement;
+const deleteSelectedBtn = document.getElementById('deleteSelected') as HTMLButtonElement;
 const redirectKeyInput = document.getElementById('redirectKey') as HTMLInputElement;
 const redirectUrlInput = document.getElementById('redirectUrl') as HTMLInputElement;
 const saveRedirectBtn = document.getElementById('saveRedirect') as HTMLButtonElement;
@@ -26,6 +31,18 @@ const bundleLabelInput = document.getElementById('bundleLabel') as HTMLInputElem
 const urlListEl = document.getElementById('urlList') as HTMLDivElement;
 const addUrlBtn = document.getElementById('addUrl') as HTMLButtonElement;
 const bundleStatusEl = document.getElementById('bundleStatus') as HTMLDivElement;
+const addAllTabsBtn = document.getElementById('addAllTabs') as HTMLButtonElement;
+const pickTabsBtn = document.getElementById('pickTabs') as HTMLButtonElement;
+const tabPickerEl = document.getElementById('tabPicker') as HTMLDivElement;
+const tabPickListEl = document.getElementById('tabPickList') as HTMLDivElement;
+const useSelectedTabsBtn = document.getElementById('useSelectedTabs') as HTMLButtonElement;
+const cancelPickerBtn = document.getElementById('cancelPicker') as HTMLButtonElement;
+
+// ── Suggestion banner ─────────────────────────────────────────────────────────
+const suggestionEl = document.getElementById('suggestion') as HTMLDivElement;
+const suggestionTextEl = document.getElementById('suggestionText') as HTMLDivElement;
+const saveSuggestionBtn = document.getElementById('saveSuggestion') as HTMLButtonElement;
+const dismissSuggestionBtn = document.getElementById('dismissSuggestion') as HTMLButtonElement;
 
 // ── Settings panel ────────────────────────────────────────────────────────────
 const shortcutPopupEl = document.getElementById('shortcutPopup') as HTMLSpanElement;
@@ -34,6 +51,13 @@ const customizeBtn = document.getElementById('customizeShortcut') as HTMLButtonE
 const maxShortcutsInput = document.getElementById('maxShortcutsInput') as HTMLInputElement;
 const saveMaxBtn = document.getElementById('saveMaxShortcuts') as HTMLButtonElement;
 const settingsStatusEl = document.getElementById('settingsStatus') as HTMLDivElement;
+const filterThresholdInput = document.getElementById('filterThresholdInput') as HTMLInputElement;
+const saveFilterThresholdBtn = document.getElementById('saveFilterThreshold') as HTMLButtonElement;
+const filterThresholdStatusEl = document.getElementById('filterThresholdStatus') as HTMLDivElement;
+const staleToggle = document.getElementById('staleToggle') as HTMLInputElement;
+const staleDaysInput = document.getElementById('staleDaysInput') as HTMLInputElement;
+const saveStaleBtn = document.getElementById('saveStale') as HTMLButtonElement;
+const staleStatusEl = document.getElementById('staleStatus') as HTMLDivElement;
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
 type TabName = 'shortcuts' | 'bundle' | 'settings';
@@ -55,15 +79,56 @@ async function render(): Promise<void> {
   const store = await getStore();
   const shortcuts = Object.values(store.shortcuts);
 
+  filterInput.hidden = shortcuts.length < store.settings.filterThreshold;
+
+  const query = filterInput.value.toLowerCase();
+  const filtered = query
+    ? shortcuts.filter(s =>
+        s.key.includes(query) ||
+        s.url.toLowerCase().includes(query) ||
+        (s.label ?? '').toLowerCase().includes(query)
+      )
+    : shortcuts;
+
   countEl.textContent = `${shortcuts.length} / ${store.settings.maxShortcuts}`;
   listEl.innerHTML = '';
 
   const isEmpty = shortcuts.length === 0;
+  const noResults = !isEmpty && filtered.length === 0;
   emptyStateEl.hidden = !isEmpty;
-  listEl.hidden = isEmpty;
+  noResultsEl.hidden = !noResults;
+  listEl.hidden = isEmpty || noResults;
 
-  shortcuts.forEach((shortcut) => listEl.appendChild(buildShortcutRow(shortcut, render)));
+  filtered.forEach((shortcut) => listEl.appendChild(buildShortcutRow(shortcut, render)));
 }
+
+filterInput.addEventListener('input', render);
+
+// ── Multi-select ──────────────────────────────────────────────────────────────
+selectToggleBtn.addEventListener('click', () => {
+  const entering = !listEl.classList.contains('selecting');
+  listEl.classList.toggle('selecting', entering);
+  selectToggleBtn.textContent = entering ? 'Cancel' : 'Select';
+  deleteSelectedBtn.hidden = true;
+  listEl.querySelectorAll<HTMLInputElement>('.select-cb').forEach(cb => { cb.checked = false; });
+});
+
+listEl.addEventListener('change', () => {
+  const count = listEl.querySelectorAll<HTMLInputElement>('.select-cb:checked').length;
+  deleteSelectedBtn.hidden = count === 0;
+  deleteSelectedBtn.textContent = `Delete (${count})`;
+});
+
+deleteSelectedBtn.addEventListener('click', async () => {
+  const keys = Array.from(
+    listEl.querySelectorAll<HTMLInputElement>('.select-cb:checked')
+  ).map(cb => cb.dataset.key!);
+  await Promise.all(keys.map(deleteShortcut));
+  listEl.classList.remove('selecting');
+  selectToggleBtn.textContent = 'Select';
+  deleteSelectedBtn.hidden = true;
+  await render();
+});
 
 // ── Add Redirect form ─────────────────────────────────────────────────────────
 function setRedirectStatus(msg: string, type: 'error' | 'success' | '' = ''): void {
@@ -107,24 +172,117 @@ saveRedirectBtn.addEventListener('click', async () => {
 });
 
 // ── Bundle form ───────────────────────────────────────────────────────────────
-function addUrlRow(): void {
+function getDragAfterElement(container: HTMLElement, y: number): HTMLElement | null {
+  const rows = [...container.querySelectorAll<HTMLElement>('.url-row:not(.dragging)')];
+  return rows.reduce<{ offset: number; element: HTMLElement | null }>(
+    (closest, el) => {
+      const box = el.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      return offset < 0 && offset > closest.offset ? { offset, element: el } : closest;
+    },
+    { offset: Number.NEGATIVE_INFINITY, element: null }
+  ).element;
+}
+
+urlListEl.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  const dragging = urlListEl.querySelector<HTMLElement>('.url-row.dragging');
+  if (!dragging) return;
+  const after = getDragAfterElement(urlListEl, e.clientY);
+  if (!after) urlListEl.appendChild(dragging);
+  else urlListEl.insertBefore(dragging, after);
+});
+
+function addUrlRow(value = ''): void {
   const row = document.createElement('div');
   row.className = 'url-row';
+  row.draggable = true;
+
   const input = document.createElement('input');
   input.type = 'text';
   input.className = 'url-input';
   input.placeholder = 'google.com or https://...';
+  input.value = value;
+
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
   removeBtn.className = 'remove-url';
   removeBtn.title = 'Remove';
   removeBtn.textContent = '×';
   removeBtn.addEventListener('click', () => row.remove());
+
+  row.addEventListener('dragstart', () => row.classList.add('dragging'));
+  row.addEventListener('dragend', () => row.classList.remove('dragging'));
+
   row.append(input, removeBtn);
   urlListEl.appendChild(row);
 }
 
-addUrlBtn.addEventListener('click', addUrlRow);
+function resetUrlList(): void {
+  urlListEl.innerHTML = '';
+  addUrlRow();
+  addUrlRow();
+}
+
+addUrlBtn.addEventListener('click', () => addUrlRow());
+
+async function addAllOpenTabs(): Promise<void> {
+  const tabs = await chrome.tabs.query({ currentWindow: true });
+  const urls = tabs.map(t => t.url ?? '').filter(u => u.startsWith('http'));
+  urlListEl.innerHTML = '';
+  urls.forEach(url => addUrlRow(url));
+  if (!bundleKeyInput.value && urls[0]) {
+    try {
+      const host = new URL(urls[0]).hostname.replace(/^www\./, '');
+      bundleKeyInput.value = host.split('.')[0];
+    } catch { /* ignore */ }
+  }
+}
+
+async function openTabPicker(): Promise<void> {
+  const tabs = await chrome.tabs.query({ currentWindow: true });
+  const httpTabs = tabs.filter(t => t.url?.startsWith('http'));
+  tabPickListEl.innerHTML = '';
+  httpTabs.forEach(tab => {
+    const label = document.createElement('label');
+    label.className = 'tab-pick-row';
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'tab-pick-cb';
+    cb.value = tab.url!;
+    cb.checked = true;
+
+    const favicon = document.createElement('img');
+    favicon.className = 'tab-favicon';
+    favicon.width = 14;
+    favicon.height = 14;
+    favicon.src = tab.favIconUrl ?? '';
+    favicon.onerror = () => { favicon.style.display = 'none'; };
+
+    const title = document.createElement('span');
+    title.className = 'tab-title';
+    title.textContent = tab.title ?? tab.url ?? '';
+    title.title = tab.url ?? '';
+
+    label.append(cb, favicon, title);
+    tabPickListEl.appendChild(label);
+  });
+  tabPickerEl.hidden = false;
+}
+
+addAllTabsBtn.addEventListener('click', addAllOpenTabs);
+pickTabsBtn.addEventListener('click', openTabPicker);
+cancelPickerBtn.addEventListener('click', () => { tabPickerEl.hidden = true; });
+
+useSelectedTabsBtn.addEventListener('click', () => {
+  const urls = Array.from(tabPickListEl.querySelectorAll<HTMLInputElement>('.tab-pick-cb:checked'))
+    .map(cb => cb.value)
+    .filter(Boolean);
+  urlListEl.innerHTML = '';
+  urls.forEach(url => addUrlRow(url));
+  tabPickerEl.hidden = true;
+});
 
 function setBundleStatus(msg: string, type: 'error' | 'success' | '' = ''): void {
   bundleStatusEl.textContent = msg;
@@ -147,15 +305,7 @@ bundleForm.addEventListener('submit', async (event) => {
     await upsertShortcut({ key, url: urls[0], type: 'bundle', bundleUrls: urls, label });
     setBundleStatus(`Bundle "${key}" saved.`, 'success');
     bundleForm.reset();
-    urlListEl.innerHTML = `
-      <div class="url-row"><input type="text" class="url-input" placeholder="google.com or https://..." /></div>
-      <div class="url-row">
-        <input type="text" class="url-input" placeholder="google.com or https://..." />
-        <button type="button" class="remove-url" title="Remove">×</button>
-      </div>`;
-    urlListEl
-      .querySelectorAll<HTMLButtonElement>('.remove-url')
-      .forEach((btn) => btn.addEventListener('click', () => btn.closest('.url-row')?.remove()));
+    resetUrlList();
     await render();
   } catch (err) {
     setBundleStatus((err as Error).message, 'error');
@@ -174,8 +324,16 @@ tabSettingsBtn.addEventListener('click', async () => {
 
   const store = await getStore();
   maxShortcutsInput.value = String(store.settings.maxShortcuts);
+  filterThresholdInput.value = String(store.settings.filterThreshold);
+  staleToggle.checked = store.settings.staleAutoDelete;
+  staleDaysInput.value = String(store.settings.staleDays);
+
   settingsStatusEl.textContent = '';
   settingsStatusEl.className = '';
+  filterThresholdStatusEl.textContent = '';
+  filterThresholdStatusEl.className = '';
+  staleStatusEl.textContent = '';
+  staleStatusEl.className = '';
 });
 
 customizeBtn.addEventListener('click', () => {
@@ -190,10 +348,35 @@ saveMaxBtn.addEventListener('click', async () => {
     return;
   }
   const store = await getStore();
-  store.settings.maxShortcuts = value;
-  await saveSettings(store.settings);
+  await saveSettings({ ...store.settings, maxShortcuts: value });
   settingsStatusEl.textContent = 'Saved.';
   settingsStatusEl.className = 'success';
+});
+
+saveFilterThresholdBtn.addEventListener('click', async () => {
+  const value = parseInt(filterThresholdInput.value, 10);
+  if (!value || value < 1 || value > 500) {
+    filterThresholdStatusEl.textContent = 'Enter a number between 1 and 500.';
+    filterThresholdStatusEl.className = 'error';
+    return;
+  }
+  const store = await getStore();
+  await saveSettings({ ...store.settings, filterThreshold: value });
+  filterThresholdStatusEl.textContent = 'Saved.';
+  filterThresholdStatusEl.className = 'success';
+});
+
+saveStaleBtn.addEventListener('click', async () => {
+  const days = parseInt(staleDaysInput.value, 10);
+  if (!days || days < 7 || days > 365) {
+    staleStatusEl.textContent = 'Enter a number between 7 and 365.';
+    staleStatusEl.className = 'error';
+    return;
+  }
+  const store = await getStore();
+  await saveSettings({ ...store.settings, staleAutoDelete: staleToggle.checked, staleDays: days });
+  staleStatusEl.textContent = 'Saved.';
+  staleStatusEl.className = 'success';
 });
 
 // ── Toggle close via keyboard shortcut ───────────────────────────────────────
@@ -204,7 +387,58 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 });
 
+// ── Live sync ─────────────────────────────────────────────────────────────────
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'sync') return;
+  if (Object.keys(changes).some(k => k.startsWith(SHORTCUT_PREFIX) || k === SETTINGS_KEY)) {
+    render();
+  }
+});
+
+// ── TIP suggestion ────────────────────────────────────────────────────────────
+async function checkTipSuggestion(): Promise<void> {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) return;
+    const r = await chrome.storage.session.get(`suggestion_${tab.id}`);
+    const suggestion = r[`suggestion_${tab.id}`] as Suggestion | undefined;
+    if (!suggestion) return;
+
+    suggestionTextEl.textContent =
+      `You often search ${suggestion.siteName}. Save "${suggestion.key}" as a shortcut?`;
+    suggestionEl.hidden = false;
+    redirectKeyInput.value = suggestion.key;
+    redirectUrlInput.value = suggestion.url;
+
+    saveSuggestionBtn.onclick = async () => {
+      await upsertShortcut({ key: suggestion.key, url: suggestion.url, type: 'redirect' });
+      await chrome.storage.session.remove(`suggestion_${tab.id!}`);
+      await chrome.action.setBadgeText({ tabId: tab.id!, text: '' });
+      suggestionEl.hidden = true;
+      await render();
+    };
+
+    dismissSuggestionBtn.onclick = async () => {
+      await chrome.storage.session.remove(`suggestion_${tab.id!}`);
+      await chrome.action.setBadgeText({ tabId: tab.id!, text: '' });
+      suggestionEl.hidden = true;
+    };
+  } catch { /* non-fatal */ }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
+redirectKeyInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); redirectUrlInput.focus(); }
+});
+redirectUrlInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); saveRedirectBtn.click(); }
+});
+
 chrome.runtime.sendMessage({ type: 'panel-opened' });
 render();
-initRedirectForm();
+resetUrlList();
+initRedirectForm().then(() => {
+  checkTipSuggestion().then(() => {
+    if (suggestionEl.hidden) redirectKeyInput.focus();
+  });
+});
