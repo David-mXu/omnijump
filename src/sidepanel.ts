@@ -1,7 +1,7 @@
 import { SETTINGS_KEY, SHORTCUT_PREFIX, deleteShortcut, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
 import { buildShortcutRow, normalizeUrl } from './ui';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
-import { Suggestion } from './types';
+import { Shortcut, Suggestion } from './types';
 
 // ── Tab elements ──────────────────────────────────────────────────────────────
 const tabShortcutsBtn = document.getElementById('tabShortcuts') as HTMLButtonElement;
@@ -74,35 +74,53 @@ function showTab(name: TabName): void {
 tabShortcutsBtn.addEventListener('click', () => showTab('shortcuts'));
 tabBundleBtn.addEventListener('click', () => showTab('bundle'));
 
-// ── Shortcut list ─────────────────────────────────────────────────────────────
-async function render(): Promise<void> {
-  const store = await getStore();
-  const shortcuts = Object.values(store.shortcuts);
+// ── Store cache + render ──────────────────────────────────────────────────────
+// shortcutCache / settingsCache hold the last-known store values.
+// refresh() reads storage and updates them; renderList() reads only the cache.
+// This means filter-input keystrokes never hit storage.
+let shortcutCache: Shortcut[] = [];
+let settingsCache = { maxShortcuts: 500, filterThreshold: 25 };
 
-  filterInput.hidden = shortcuts.length < store.settings.filterThreshold;
+function renderList(): void {
+  filterInput.hidden = shortcutCache.length < settingsCache.filterThreshold;
 
   const query = filterInput.value.toLowerCase();
   const filtered = query
-    ? shortcuts.filter(s =>
+    ? shortcutCache.filter(s =>
         s.key.includes(query) ||
         s.url.toLowerCase().includes(query) ||
         (s.label ?? '').toLowerCase().includes(query)
       )
-    : shortcuts;
+    : shortcutCache;
 
-  countEl.textContent = `${shortcuts.length} / ${store.settings.maxShortcuts}`;
-  listEl.innerHTML = '';
+  countEl.textContent = `${shortcutCache.length} / ${settingsCache.maxShortcuts}`;
 
-  const isEmpty = shortcuts.length === 0;
+  const isEmpty = shortcutCache.length === 0;
   const noResults = !isEmpty && filtered.length === 0;
   emptyStateEl.hidden = !isEmpty;
   noResultsEl.hidden = !noResults;
   listEl.hidden = isEmpty || noResults;
 
-  filtered.forEach((shortcut) => listEl.appendChild(buildShortcutRow(shortcut, render)));
+  const frag = document.createDocumentFragment();
+  filtered.forEach((s) => frag.appendChild(buildShortcutRow(s, refresh)));
+  listEl.replaceChildren(frag);
 }
 
-filterInput.addEventListener('input', render);
+async function refresh(): Promise<void> {
+  const store = await getStore();
+  shortcutCache = Object.values(store.shortcuts);
+  settingsCache = { maxShortcuts: store.settings.maxShortcuts, filterThreshold: store.settings.filterThreshold };
+  renderList();
+}
+
+// Batches rapid onChanged bursts (e.g. bulk delete) into a single refresh.
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleRefresh(): void {
+  if (refreshTimer !== null) clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => { refreshTimer = null; void refresh(); }, 50);
+}
+
+filterInput.addEventListener('input', renderList);
 
 // ── Multi-select ──────────────────────────────────────────────────────────────
 selectToggleBtn.addEventListener('click', () => {
@@ -127,7 +145,7 @@ deleteSelectedBtn.addEventListener('click', async () => {
   listEl.classList.remove('selecting');
   selectToggleBtn.textContent = 'Select';
   deleteSelectedBtn.hidden = true;
-  await render();
+  await refresh();
 });
 
 // ── Add Redirect form ─────────────────────────────────────────────────────────
@@ -136,21 +154,13 @@ function setRedirectStatus(msg: string, type: 'error' | 'success' | '' = ''): vo
   addRedirectStatusEl.className = type;
 }
 
-async function initRedirectForm(): Promise<void> {
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab?.url) {
-      redirectUrlInput.value = tab.url;
-      const store = await getStore();
-      const existingKeys = new Set(Object.keys(store.shortcuts));
-      const suggested = suggestKeyFromUrl(tab.url);
-      if (suggested) {
-        redirectKeyInput.value = uniqueKey(suggested, existingKeys);
-      }
-    }
-  } catch {
-    // non-fatal — fields stay empty
-  }
+function initRedirectForm(tab: chrome.tabs.Tab | undefined): void {
+  if (!tab?.url) return;
+  redirectUrlInput.value = tab.url;
+  // shortcutCache is populated by refresh() before this runs
+  const existingKeys = new Set(shortcutCache.map(s => s.key));
+  const suggested = suggestKeyFromUrl(tab.url);
+  if (suggested) redirectKeyInput.value = uniqueKey(suggested, existingKeys);
 }
 
 saveRedirectBtn.addEventListener('click', async () => {
@@ -165,7 +175,7 @@ saveRedirectBtn.addEventListener('click', async () => {
     setRedirectStatus(`Saved "${key}".`, 'success');
     redirectKeyInput.value = '';
     redirectUrlInput.value = '';
-    await render();
+    await refresh();
   } catch (err) {
     setRedirectStatus((err as Error).message, 'error');
   }
@@ -173,7 +183,7 @@ saveRedirectBtn.addEventListener('click', async () => {
 
 // ── Bundle form ───────────────────────────────────────────────────────────────
 function getDragAfterElement(container: HTMLElement, y: number): HTMLElement | null {
-  const rows = [...container.querySelectorAll<HTMLElement>('.url-row:not(.dragging)')];
+  const rows = Array.from(container.querySelectorAll<HTMLElement>('.url-row:not(.dragging)'));
   return rows.reduce<{ offset: number; element: HTMLElement | null }>(
     (closest, el) => {
       const box = el.getBoundingClientRect();
@@ -306,7 +316,7 @@ bundleForm.addEventListener('submit', async (event) => {
     setBundleStatus(`Bundle "${key}" saved.`, 'success');
     bundleForm.reset();
     resetUrlList();
-    await render();
+    await refresh();
   } catch (err) {
     setBundleStatus((err as Error).message, 'error');
   }
@@ -391,39 +401,37 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'sync') return;
   if (Object.keys(changes).some(k => k.startsWith(SHORTCUT_PREFIX) || k === SETTINGS_KEY)) {
-    render();
+    scheduleRefresh();
   }
 });
 
 // ── TIP suggestion ────────────────────────────────────────────────────────────
-async function checkTipSuggestion(): Promise<void> {
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return;
-    const r = await chrome.storage.session.get(`suggestion_${tab.id}`);
-    const suggestion = r[`suggestion_${tab.id}`] as Suggestion | undefined;
-    if (!suggestion) return;
+async function checkTipSuggestion(tab: chrome.tabs.Tab | undefined): Promise<void> {
+  if (!tab?.id) return;
+  const r = await chrome.storage.session.get(`suggestion_${tab.id}`);
+  const suggestion = r[`suggestion_${tab.id}`] as Suggestion | undefined;
+  if (!suggestion) return;
 
-    suggestionTextEl.textContent =
-      `You often search ${suggestion.siteName}. Save "${suggestion.key}" as a shortcut?`;
-    suggestionEl.hidden = false;
-    redirectKeyInput.value = suggestion.key;
-    redirectUrlInput.value = suggestion.url;
+  suggestionTextEl.textContent =
+    `You often search ${suggestion.siteName}. Save "${suggestion.key}" as a shortcut?`;
+  suggestionEl.hidden = false;
+  redirectKeyInput.value = suggestion.key;
+  redirectUrlInput.value = suggestion.url;
 
-    saveSuggestionBtn.onclick = async () => {
-      await upsertShortcut({ key: suggestion.key, url: suggestion.url, type: 'redirect' });
-      await chrome.storage.session.remove(`suggestion_${tab.id!}`);
-      await chrome.action.setBadgeText({ tabId: tab.id!, text: '' });
-      suggestionEl.hidden = true;
-      await render();
-    };
+  const tabId = tab.id;
+  saveSuggestionBtn.onclick = async () => {
+    await upsertShortcut({ key: suggestion.key, url: suggestion.url, type: 'redirect' });
+    await chrome.storage.session.remove(`suggestion_${tabId}`);
+    await chrome.action.setBadgeText({ tabId, text: '' });
+    suggestionEl.hidden = true;
+    await refresh();
+  };
 
-    dismissSuggestionBtn.onclick = async () => {
-      await chrome.storage.session.remove(`suggestion_${tab.id!}`);
-      await chrome.action.setBadgeText({ tabId: tab.id!, text: '' });
-      suggestionEl.hidden = true;
-    };
-  } catch { /* non-fatal */ }
+  dismissSuggestionBtn.onclick = async () => {
+    await chrome.storage.session.remove(`suggestion_${tabId}`);
+    await chrome.action.setBadgeText({ tabId, text: '' });
+    suggestionEl.hidden = true;
+  };
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -435,10 +443,16 @@ redirectUrlInput.addEventListener('keydown', (e) => {
 });
 
 chrome.runtime.sendMessage({ type: 'panel-opened' });
-render();
 resetUrlList();
-initRedirectForm().then(() => {
-  checkTipSuggestion().then(() => {
-    if (suggestionEl.hidden) redirectKeyInput.focus();
-  });
-});
+
+// Await refresh so shortcutCache is warm before initRedirectForm reads it,
+// then share a single tab query between initRedirectForm and checkTipSuggestion.
+(async () => {
+  await refresh();
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    initRedirectForm(tab);
+    await checkTipSuggestion(tab);
+  } catch { /* non-fatal */ }
+  if (suggestionEl.hidden) redirectKeyInput.focus();
+})();

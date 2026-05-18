@@ -100,7 +100,6 @@ async function handleBundleNavigation(url: string, tabId: number): Promise<void>
 }
 
 async function finalizeTabSession(
-  tabId: number,
   session: { host: string; param: string; baseUrl: string }
 ): Promise<void> {
   const r = await chrome.storage.session.get('searchVisitCounts');
@@ -115,18 +114,15 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
   const parsed = hit ? new URL(url) : null;
   const host = parsed?.hostname.replace(/^www\./, '') ?? null;
 
-  console.log('[SmartTip] url:', url, '| hit:', hit, '| host:', host, '| tabId:', tabId);
-
-  const sessRes = await chrome.storage.session.get('tabActiveSessions');
+  const sessionKeys = hit
+    ? ['tabActiveSessions', 'searchVisitCounts']
+    : ['tabActiveSessions'];
+  const sessRes = await chrome.storage.session.get(sessionKeys);
   const sessions = (sessRes.tabActiveSessions ?? {}) as Record<number, { host: string; param: string; baseUrl: string } | null>;
   const prev = sessions[tabId] ?? null;
 
-  console.log('[SmartTip] prev session:', prev);
-
   if (prev && prev.host !== host) {
-    console.log('[SmartTip] host changed, finalizing prev session');
-    await finalizeTabSession(tabId, prev);
-    sessions[tabId] = null;
+    await finalizeTabSession(prev);
   }
 
   if (!hit || !host) {
@@ -142,7 +138,6 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
     (s) => s.url.startsWith(hit.baseUrl)
   );
   if (alreadyCovered) {
-    console.log('[SmartTip] already covered, skipping');
     sessions[tabId] = null;
     await chrome.storage.session.set({ tabActiveSessions: sessions });
     await chrome.action.setBadgeText({ tabId, text: '' });
@@ -152,15 +147,11 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
   if (!prev || prev.host !== host) {
     sessions[tabId] = { host, param: hit.param, baseUrl: hit.baseUrl };
     await chrome.storage.session.set({ tabActiveSessions: sessions });
-    console.log('[SmartTip] new session started for', host);
   }
 
-  const countRes = await chrome.storage.session.get('searchVisitCounts');
-  const counts = (countRes.searchVisitCounts ?? {}) as Record<string, number>;
+  const counts = (sessRes.searchVisitCounts ?? {}) as Record<string, number>;
   const countKey = `${host}|${hit.param}`;
   const total = (counts[countKey] ?? 0) + 1;
-
-  console.log('[SmartTip] visit counts:', counts, '| total (completed+1):', total, '| threshold:', TIP_THRESHOLD);
 
   if (total >= TIP_THRESHOLD) {
     const siteName = formatSiteName(host);
@@ -169,7 +160,6 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
     await chrome.storage.session.set({ [`suggestion_${tabId}`]: suggestion });
     await chrome.action.setBadgeBackgroundColor({ color: '#4c6ef5' });
     await chrome.action.setBadgeText({ tabId, text: 'TIP' });
-    console.log('[SmartTip] TIP badge shown for', host);
   }
 }
 
@@ -256,12 +246,10 @@ chrome.commands.onCommand.addListener((command, tab) => {
 });
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
-  console.log('[TabRemoved] tab closed:', tabId);
   const r = await chrome.storage.session.get('tabActiveSessions');
   const sessions = (r.tabActiveSessions ?? {}) as Record<number, { host: string; param: string; baseUrl: string } | null>;
   const session = sessions[tabId];
-  console.log('[TabRemoved] session to finalize:', session);
-  if (session) await finalizeTabSession(tabId, session);
+  if (session) await finalizeTabSession(session);
   delete sessions[tabId];
   await chrome.storage.session.set({ tabActiveSessions: sessions });
 });
