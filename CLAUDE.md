@@ -16,9 +16,15 @@ npm run build:all
 
 # Type-check only (no emit)
 npx tsc --noEmit
+
+# Run tests once
+npm test
+
+# Run tests in watch mode (re-runs on save)
+npm run test:watch
 ```
 
-No dev server, test suite, or linter is configured. Load the built extension from `dist/chrome` or `dist/firefox` in the browser's extension manager.
+No dev server is configured. Load the built extension from `dist/chrome` or `dist/firefox` in the browser's extension manager.
 
 ## Architecture
 
@@ -28,30 +34,66 @@ No dev server, test suite, or linter is configured. Load the built extension fro
 
 **Data flow**:
 
-1. Shortcuts are stored in `chrome.storage.local` under the single key `omnibarShortcuts` (see `storage.ts`). `local` is used instead of `sync` because `sync` has an 8 KB per-item limit that is impractical for a shortcut store.
+1. Shortcuts are stored in `chrome.storage.sync` as individual keys — `omnibar_s_{normalizedKey}` per shortcut, `omnibar_settings` for settings. This avoids the 8 KB per-item limit that a single-key approach would hit, while keeping cross-device sync. Practical ceiling is ~511 shortcuts (chrome.storage.sync's 512-item cap).
 2. On every storage change, `background.ts` calls `rebuildDynamicRules()` from `dnr.ts`, which clears all existing DNR dynamic rules and re-adds rules built from the full current store. Rule IDs are positional (`index + 1`).
 3. DNR rules match omnibar searches by intercepting the search engine URL (e.g. `https://google.com/search?q=gh`) via a regex on the `q=` query parameter and redirecting to the shortcut's target URL.
 4. For `bundle` shortcuts, the DNR rule redirects to the first URL. The service worker also listens on `webNavigation.onBeforeNavigate`, detects bundle keyword matches, and opens the remaining URLs as background tabs.
 
 **Shortcut types**:
 - `redirect`: single URL target, handled entirely by DNR.
-- `bundle`: multiple URL targets; DNR handles the first, service worker opens the rest. Bundle creation is only in the side panel.
+- `bundle`: multiple URL targets; DNR handles the first, service worker opens the rest.
 
 **Key normalization**: `normalizeKey()` in `storage.ts` lowercases, trims, collapses spaces to hyphens, and strips non-alphanumeric characters. All storage lookups use normalized keys.
 
 **UI entry points**:
-- `popup.ts` / `popup.html` — quick-save the current tab as a redirect shortcut; auto-suggests a key from the tab's hostname.
-- `sidepanel.ts` / `sidepanel.html` — two-tab panel: shortcut list with delete, and a "New Bundle" form.
-- `options.ts` / `options.html` — full-tab shortcut list with delete (no add form).
+- `popup.ts` / `popup.html` — quick-save the current tab as a redirect shortcut; auto-suggests a key from the hostname. Has an "Open Panel" button.
+- `sidepanel.ts` / `sidepanel.html` — three-tab panel: Shortcuts, New Bundle, Settings.
+- `options.ts` / `options.html` — full-page shortcut list (same feature set as the sidepanel's Shortcuts tab, shares `buildShortcutRow` from `ui.ts`).
+- `ui.ts` — shared `buildShortcutRow()` used by both the sidepanel and options page. Also exports `normalizeUrl()` (prepends `https://` if no protocol given).
 
-**Smart tip badge**: `background.ts` tracks how many times a search query has been used without a matching shortcut. After 3 uses it shows a `TIP` badge on the extension icon for that tab. Counts survive service worker restarts because they are stored in `chrome.storage.session` (persists for the browser session, cleared on browser close).
+**Shortcut lifecycle**:
+- `createdAt` is set on first save, preserved on updates.
+- `lastUsed` is updated via `touchShortcut()` in `storage.ts` each time a shortcut is activated via the omnibar (detected in `handleShortcutTouch` in `background.ts`).
+- `cleanupStaleShortcuts()` runs on `onInstalled` and `onStartup`. Shortcuts with `lastUsed` older than `staleDays` are deleted. Shortcuts with no `lastUsed` (brand new) get a grace period: their `lastUsed` is set to `Date.now()` rather than being immediately deleted.
 
-**Bundle deduplication**: `shouldHandleBundle` in `background.ts` uses `chrome.storage.session` to record the last time extra tabs were opened for each tab ID. If the same tab triggers again within 1,500 ms it skips, preventing double-opens from redundant `onBeforeNavigate` events during a DNR redirect.
+**Side panel features**:
+- **Filter bar**: hidden until the shortcut count reaches `filterThreshold` (default 25, configurable in Settings). Searches key, URL, and label in real time.
+- **Multi-select bulk delete**: "Select" button enters select mode; clicking a row or its checkbox toggles it. "Delete (N)" button appears when at least one is selected.
+- **Live sync**: `chrome.storage.onChanged` listener re-renders the list whenever any `omnibar_s_` or `omnibar_settings` key changes, so edits from another device appear immediately.
+- **Add redirect form**: keyword + URL inputs with Enter key navigation (Enter in keyword → focus URL; Enter in URL → submit). Auto-focuses on panel open.
+- **TIP suggestion banner**: the background tracks how many times the user searches a site (per-tab sessions, finalized on host change or tab close). After 3 visits it stores a `Suggestion` in `chrome.storage.session`. The panel reads this on open and shows a dismissable banner: "You often search {Site}. Save '{key}' as a shortcut?" — pre-filling the redirect form. The background detects multiple search params (`q`, `query`, `search_query`, `s`, etc.) to cover more search engines.
 
-## Remaining gaps
+**Bundle panel features**:
+- "Add all open tabs" fills the URL list with all HTTP tabs in the current window.
+- Tab picker: shows tabs with favicons and checkboxes, then inserts the selected URLs.
+- Drag to reorder: URL rows are draggable via the HTML drag-and-drop API; `dragover` handles insertion point calculation.
 
-**No redirect-add form in the side panel**: To add a redirect shortcut, users must use the popup or the context menu. The side panel only supports listing/deleting shortcuts and creating bundles.
+**Settings panel**:
+- Max shortcuts cap (1–500)
+- Filter threshold (number of shortcuts before the filter bar appears)
+- Stale auto-delete toggle + number of days (7–365)
+- Links to `chrome://extensions/shortcuts` to configure keyboard shortcuts
 
-**`options.ts` and the side panel's Shortcuts tab are duplicated**: Both render the same shortcut list with delete buttons. `options.ts` also doesn't handle the `bundle` type correctly — it shows `shortcut.url` (the first bundle URL) rather than a label or URL count.
+**Smart tip badge**: `background.ts` sets a `TIP` badge on the extension icon after the threshold is crossed. Counts survive service worker restarts because they are stored in `chrome.storage.session`.
 
-**Context menu saves silently**: The `contextMenus.onClicked` handler saves the shortcut with a green ✓ badge for 2.5 seconds, but there is no way to see or edit what key was assigned from within the context menu flow.
+**Bundle deduplication**: `shouldHandleBundle` in `background.ts` uses `chrome.storage.session` to record the last time extra tabs were opened for each tab ID. If the same tab triggers again within 1,500 ms it skips, preventing double-opens from redundant `onBeforeNavigate` events.
+
+## Testing
+
+Tests live alongside source files (`*.test.ts`) and use **Vitest** with a Node environment. Chrome APIs are mocked via `src/test/chrome-mock.ts`, which provides an in-memory implementation of `chrome.storage.sync/local/session` and `chrome.declarativeNetRequest`. Each test file creates a fresh mock in `beforeEach` via `createChromeMock()` and assigns it to `globalThis.chrome`.
+
+| File | What it covers |
+|------|----------------|
+| `src/suggest.test.ts` | `normalizeKey`, `suggestKeyFromUrl`, `uniqueKey` |
+| `src/storage.test.ts` | `getStore`, `upsertShortcut`, `deleteShortcut`, `saveSettings`, `migrateFromLegacyStorage` |
+| `src/dnr.test.ts` | `rebuildDynamicRules`, rule IDs, DNR regex correctness |
+
+CI runs on every push via `.github/workflows/ci.yml`: `npm ci` → `tsc --noEmit` → `npm test`.
+
+## Known issues / remaining gaps
+
+**Debug `console.log` statements in `background.ts`**: `handleSmartTip` and the `tabs.onRemoved` handler have debug logs that should be removed or gated behind a dev flag before shipping.
+
+**`chrome.storage.onChanged` live sync is not in options page**: The full-page options view doesn't re-render when storage changes. Only the side panel does.
+
+**`migrateFromLegacyStorage` is not called on `onStartup`**: Migration only runs on `onInstalled`. If the service worker somehow missed `onInstalled` (e.g. sideloaded without reloading), data won't migrate.
