@@ -88,6 +88,28 @@
         background: none; border: 1px solid #d0d0d0; border-radius: 3px; color: #777; cursor: pointer;
       }
       #dismissSuggestion:hover { background: #f5f5f5; }
+
+      /* ── Dark mode ────────────────────────────────────────────────────────── */
+      body.dark { background: #1a1a1b; color: #e0e0e0; }
+      body.dark h1 { color: #e0e0e0; }
+      body.dark label { color: #aaa; }
+      body.dark input {
+        background: #2a2a2a;
+        border-color: #3d3d3d;
+        color: #e0e0e0;
+      }
+      body.dark input::placeholder { color: #555; }
+      body.dark input:focus {
+        border-color: #7b9eff;
+        box-shadow: 0 0 0 2px rgba(123,158,255,0.18);
+      }
+      body.dark #status { color: #888; }
+      body.dark #openPanel { border-color: #333; color: #666; }
+      body.dark #openPanel:hover { background: #2a2a2a; color: #aaa; }
+      body.dark #suggestion { background: #1e2540; border-left-color: #7b9eff; }
+      body.dark #suggestionText { color: #ccc; }
+      body.dark #dismissSuggestion { border-color: #444; color: #888; }
+      body.dark #dismissSuggestion:hover { background: #2a2a2a; }
     </style>
   </head>
   <body>

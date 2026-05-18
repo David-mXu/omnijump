@@ -48,6 +48,9 @@ function showSuggestion(s: Suggestion, tabId: number): void {
 
 async function init(): Promise<void> {
 	try {
+		const store = await getStore();
+		document.body.classList.toggle('dark', store.settings.darkMode ?? false);
+
 		const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 		if (tab?.url && urlInput) {
 			urlInput.value = tab.url;
