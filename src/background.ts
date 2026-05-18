@@ -176,13 +176,13 @@ chrome.runtime.onInstalled.addListener(async () => {
 
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
-      id: 'omnibar-save-page',
+      id: 'omnijump-save-page',
       title: 'Save Page as Shortcut',
       contexts: ['page'],
     });
 
     chrome.contextMenus.create({
-      id: 'omnibar-save-link',
+      id: 'omnijump-save-link',
       title: 'Save Link as Shortcut',
       contexts: ['link'],
     });
@@ -198,7 +198,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  const url = info.menuItemId === 'omnibar-save-link' ? info.linkUrl : tab?.url;
+  const url = info.menuItemId === 'omnijump-save-link' ? info.linkUrl : tab?.url;
   if (!url) {
     return;
   }

@@ -501,7 +501,7 @@ exportBtn.addEventListener('click', async () => {
   const payload = { version: 1, shortcuts: Object.values(store.shortcuts), settings: store.settings };
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
-  a.download = 'omnibar-shortcuts.json';
+  a.download = 'omnijump.json';
   a.click();
   URL.revokeObjectURL(a.href);
 });

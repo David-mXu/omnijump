@@ -16,7 +16,7 @@ export default function createManifest(target: BrowserTarget): Manifest {
 
   const manifest: Manifest = {
     manifest_version: 3,
-    name: 'Omnibar Shortcuts',
+    name: 'OmniJump',
     version: '1.0.0',
     description:
       'Instant address-bar shortcuts for redirects, bundles, and dynamic searches.',
@@ -27,7 +27,7 @@ export default function createManifest(target: BrowserTarget): Manifest {
       '128': 'images/icon128.png',
     },
     action: {
-      default_title: 'Omnibar Shortcuts',
+      default_title: 'OmniJump',
       default_popup: 'src/popup.html',
       default_icon: {
         '16': 'images/icon16.png',
@@ -48,7 +48,7 @@ export default function createManifest(target: BrowserTarget): Manifest {
           default: 'Ctrl+Shift+S',
           mac: 'MacCtrl+Shift+S',
         },
-        description: 'Open Omnibar Shortcuts side panel',
+        description: 'Open OmniJump side panel',
       },
     },
   };
@@ -61,7 +61,7 @@ export default function createManifest(target: BrowserTarget): Manifest {
       sidebar_action?: { default_panel: string; default_title: string };
     }).browser_specific_settings = {
       gecko: {
-        id: 'omnibar-shortcuts@example.com',
+        id: 'omnijump@example.com',
         strict_min_version: '128.0',
       },
     };
@@ -69,7 +69,7 @@ export default function createManifest(target: BrowserTarget): Manifest {
       sidebar_action?: { default_panel: string; default_title: string };
     }).sidebar_action = {
       default_panel: 'src/sidepanel.html',
-      default_title: 'Omnibar Shortcuts',
+      default_title: 'OmniJump',
     };
   } else {
     manifest.permissions = [

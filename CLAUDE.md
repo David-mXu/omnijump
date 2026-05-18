@@ -28,7 +28,7 @@ No dev server is configured. Load the built extension from `dist/chrome` or `dis
 
 ## Architecture
 
-**Omnibar Shortcuts** is a Manifest V3 browser extension (Chrome + Firefox) that lets users save short keywords and trigger URL redirects or tab bundles by typing them into the browser's address bar.
+**OmniJump** is a Manifest V3 browser extension (Chrome + Firefox) that lets users save short keywords and trigger URL redirects or tab bundles by typing them into the browser's address bar.
 
 **Build system**: Vite + `@crxjs/vite-plugin`. The manifest is generated programmatically from `src/manifest.ts` rather than being a static JSON file. `vite.config.ts` reads the `--mode` flag (`chrome` or `firefox`) and passes it to `createManifest()` for target-specific output. Output lands in `dist/{browser}`.
 
