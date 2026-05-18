@@ -37,6 +37,11 @@ const tabPickerEl = document.getElementById('tabPicker') as HTMLDivElement;
 const tabPickListEl = document.getElementById('tabPickList') as HTMLDivElement;
 const useSelectedTabsBtn = document.getElementById('useSelectedTabs') as HTMLButtonElement;
 const cancelPickerBtn = document.getElementById('cancelPicker') as HTMLButtonElement;
+const pickShortcutsBtn = document.getElementById('pickShortcuts') as HTMLButtonElement;
+const shortcutPickerEl = document.getElementById('shortcutPicker') as HTMLDivElement;
+const shortcutPickListEl = document.getElementById('shortcutPickList') as HTMLDivElement;
+const useSelectedShortcutsBtn = document.getElementById('useSelectedShortcuts') as HTMLButtonElement;
+const cancelShortcutPickerBtn = document.getElementById('cancelShortcutPicker') as HTMLButtonElement;
 
 // ── Suggestion banner ─────────────────────────────────────────────────────────
 const suggestionEl = document.getElementById('suggestion') as HTMLDivElement;
@@ -324,7 +329,7 @@ async function openTabPicker(): Promise<void> {
 }
 
 addAllTabsBtn.addEventListener('click', addAllOpenTabs);
-pickTabsBtn.addEventListener('click', openTabPicker);
+pickTabsBtn.addEventListener('click', () => { shortcutPickerEl.hidden = true; openTabPicker(); });
 cancelPickerBtn.addEventListener('click', () => { tabPickerEl.hidden = true; });
 
 useSelectedTabsBtn.addEventListener('click', () => {
@@ -334,6 +339,56 @@ useSelectedTabsBtn.addEventListener('click', () => {
   urlListEl.innerHTML = '';
   urls.forEach(url => addUrlRow(url));
   tabPickerEl.hidden = true;
+});
+
+function openShortcutPicker(): void {
+  const candidates = shortcutCache.filter(s => s.type !== 'bundle');
+  shortcutPickListEl.innerHTML = '';
+  if (candidates.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'picker-empty';
+    empty.textContent = 'No redirect or search shortcuts saved yet.';
+    shortcutPickListEl.appendChild(empty);
+  } else {
+    candidates.forEach(shortcut => {
+      const label = document.createElement('label');
+      label.className = 'tab-pick-row';
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'shortcut-pick-cb';
+      cb.value = shortcut.url;
+      cb.checked = true;
+
+      const item = document.createElement('div');
+      item.className = 'shortcut-pick-item';
+
+      const keyEl = document.createElement('div');
+      keyEl.className = 'shortcut-pick-key';
+      keyEl.textContent = shortcut.label ?? shortcut.key;
+
+      const urlEl = document.createElement('div');
+      urlEl.className = 'shortcut-pick-url';
+      urlEl.textContent = shortcut.urlTemplate ?? shortcut.url;
+      urlEl.title = shortcut.url;
+
+      item.append(keyEl, urlEl);
+      label.append(cb, item);
+      shortcutPickListEl.appendChild(label);
+    });
+  }
+  shortcutPickerEl.hidden = false;
+}
+
+pickShortcutsBtn.addEventListener('click', () => { tabPickerEl.hidden = true; openShortcutPicker(); });
+cancelShortcutPickerBtn.addEventListener('click', () => { shortcutPickerEl.hidden = true; });
+
+useSelectedShortcutsBtn.addEventListener('click', () => {
+  const urls = Array.from(shortcutPickListEl.querySelectorAll<HTMLInputElement>('.shortcut-pick-cb:checked'))
+    .map(cb => cb.value)
+    .filter(Boolean);
+  urls.forEach(url => addUrlRow(url));
+  shortcutPickerEl.hidden = true;
 });
 
 function setBundleStatus(msg: string, type: 'error' | 'success' | '' = ''): void {
@@ -469,17 +524,47 @@ importBtn.addEventListener('click', () => importFile.click());
 importFile.addEventListener('change', async () => {
   const file = importFile.files?.[0];
   if (!file) return;
+  let payload: { version?: number; shortcuts?: unknown[]; settings?: unknown };
   try {
-    const payload = JSON.parse(await file.text());
-    if (Array.isArray(payload.shortcuts)) {
-      for (const s of payload.shortcuts) await upsertShortcut(s as Shortcut);
-    }
-    if (payload.settings) await saveSettings(payload.settings);
-    await refresh();
-    dataStatusEl.textContent = `Imported ${payload.shortcuts?.length ?? 0} shortcuts.`;
+    payload = JSON.parse(await file.text());
   } catch {
-    dataStatusEl.textContent = 'Import failed — invalid file.';
+    dataStatusEl.textContent = 'Import failed — file is not valid JSON.';
+    importFile.value = '';
+    return;
   }
+  if (!Array.isArray(payload?.shortcuts)) {
+    dataStatusEl.textContent = 'Import failed — missing "shortcuts" array in file.';
+    importFile.value = '';
+    return;
+  }
+  // Apply settings first so maxShortcuts from the file is in effect.
+  if (payload.settings) {
+    try { await saveSettings(payload.settings as Parameters<typeof saveSettings>[0]); } catch { /* ignore */ }
+  }
+  // Write shortcuts directly, bypassing the limit check (restore operation).
+  // The only hard cap is Chrome's 512-item storage limit.
+  let imported = 0;
+  let failed = 0;
+  for (const s of payload.shortcuts) {
+    try {
+      const shortcut = s as Shortcut;
+      const key = normalizeKey(shortcut.key);
+      if (!key) throw new Error('Key is empty after normalization.');
+      const normalized: Shortcut = { ...shortcut, key };
+      if (normalized.type === 'bundle' && normalized.bundleUrls?.length) {
+        normalized.url = normalized.bundleUrls[0];
+      }
+      await chrome.storage.sync.set({ [`${SHORTCUT_PREFIX}${key}`]: normalized });
+      imported++;
+    } catch (err) {
+      failed++;
+      console.error('Failed to import shortcut:', s, err);
+    }
+  }
+  await refresh();
+  dataStatusEl.textContent = failed > 0
+    ? `Imported ${imported} shortcuts (${failed} failed — check console for details).`
+    : `Imported ${imported} shortcuts.`;
   importFile.value = '';
 });
 
