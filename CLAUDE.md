@@ -92,8 +92,4 @@ CI runs on every push via `.github/workflows/ci.yml`: `npm ci` → `tsc --noEmit
 
 ## Known issues / remaining gaps
 
-**Debug `console.log` statements in `background.ts`**: `handleSmartTip` and the `tabs.onRemoved` handler have debug logs that should be removed or gated behind a dev flag before shipping.
-
-**`chrome.storage.onChanged` live sync is not in options page**: The full-page options view doesn't re-render when storage changes. Only the side panel does.
-
-**`migrateFromLegacyStorage` is not called on `onStartup`**: Migration only runs on `onInstalled`. If the service worker somehow missed `onInstalled` (e.g. sideloaded without reloading), data won't migrate.
+None currently known.

@@ -164,6 +164,7 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
 }
 
 chrome.runtime.onStartup.addListener(async () => {
+  await migrateFromLegacyStorage();
   await cleanupStaleShortcuts();
   syncRules();
 });

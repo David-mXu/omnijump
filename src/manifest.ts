@@ -17,7 +17,7 @@ export default function createManifest(target: BrowserTarget): Manifest {
   const manifest: Manifest = {
     manifest_version: 3,
     name: 'Omnibar Shortcuts',
-    version: '0.1.0',
+    version: '1.0.0',
     description:
       'Instant address-bar shortcuts for redirects, bundles, and dynamic searches.',
     icons: {

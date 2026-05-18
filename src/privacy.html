@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Omnibar Shortcuts — Privacy Policy</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 680px; margin: 40px auto; padding: 0 20px; color: #333; line-height: 1.6; }
+    h1 { font-size: 1.4rem; }
+    h2 { font-size: 1rem; margin-top: 1.6em; }
+  </style>
+</head>
+<body>
+  <h1>Privacy Policy — Omnibar Shortcuts</h1>
+  <p><em>Last updated: 2026-05-18</em></p>
+
+  <h2>Data collected</h2>
+  <p>Omnibar Shortcuts stores only the shortcuts you create (keyword, URL, label) and your preference settings. This data is saved in <code>chrome.storage.sync</code> so it syncs across your signed-in Chrome devices. No data is sent to any external server.</p>
+
+  <h2>Permissions used</h2>
+  <ul>
+    <li><strong>storage</strong> — saves your shortcuts and settings locally and across devices via Chrome sync.</li>
+    <li><strong>tabs</strong> — reads tab URLs to suggest shortcut keys and open bundle URLs.</li>
+    <li><strong>webNavigation</strong> — detects when you navigate to a shortcut keyword so usage stats can be recorded and smart tips suggested.</li>
+    <li><strong>declarativeNetRequest / declarativeNetRequestWithHostAccess</strong> — intercepts matching address-bar queries to perform URL redirects without sending data to a server.</li>
+    <li><strong>contextMenus</strong> — adds "Save Page as Shortcut" and "Save Link as Shortcut" options to the right-click menu.</li>
+    <li><strong>sidePanel</strong> — displays the shortcuts manager panel inside Chrome.</li>
+    <li><strong>host_permissions (&lt;all_urls&gt;)</strong> — required by declarativeNetRequest to match and redirect any URL the user has configured as a shortcut target.</li>
+  </ul>
+
+  <h2>Third-party sharing</h2>
+  <p>No data is shared with third parties. The extension has no analytics, telemetry, or remote connections of any kind.</p>
+
+  <h2>Contact</h2>
+  <p>Questions? Open an issue on the extension's GitHub repository.</p>
+</body>
+</html>

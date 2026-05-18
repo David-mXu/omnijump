@@ -1,4 +1,4 @@
-import { deleteShortcut, getStore } from './storage';
+import { deleteShortcut, getStore, SETTINGS_KEY, SHORTCUT_PREFIX } from './storage';
 import { buildShortcutRow } from './ui';
 
 const listEl = document.getElementById('shortcutList') as HTMLUListElement;
@@ -62,6 +62,14 @@ deleteSelectedBtn.addEventListener('click', async () => {
   selectToggleBtn.textContent = 'Select';
   deleteSelectedBtn.hidden = true;
   await render();
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync' && Object.keys(changes).some(
+    k => k.startsWith(SHORTCUT_PREFIX) || k === SETTINGS_KEY
+  )) {
+    render();
+  }
 });
 
 render();
