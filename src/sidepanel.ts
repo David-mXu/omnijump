@@ -1,5 +1,5 @@
-import { SETTINGS_KEY, SHORTCUT_PREFIX, deleteShortcut, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
-import { buildShortcutRow, normalizeUrl } from './ui';
+import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, deleteShortcut, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
+import { buildShortcutRow, hoveredRow, normalizeUrl } from './ui';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
 import { Shortcut, Suggestion } from './types';
 
@@ -44,7 +44,18 @@ const suggestionTextEl = document.getElementById('suggestionText') as HTMLDivEle
 const saveSuggestionBtn = document.getElementById('saveSuggestion') as HTMLButtonElement;
 const dismissSuggestionBtn = document.getElementById('dismissSuggestion') as HTMLButtonElement;
 
+// ── Redirect form extras ──────────────────────────────────────────────────────
+const searchToggleBtn = document.getElementById('searchToggle') as HTMLButtonElement;
+const searchFieldsEl = document.getElementById('searchFields') as HTMLDivElement;
+const redirectUrlTemplateInput = document.getElementById('redirectUrlTemplate') as HTMLInputElement;
+
 // ── Settings panel ────────────────────────────────────────────────────────────
+const weeklyChartEl = document.getElementById('weeklyChart') as HTMLDivElement;
+const weekTotalEl = document.getElementById('weekTotal') as HTMLDivElement;
+const exportBtn = document.getElementById('exportBtn') as HTMLButtonElement;
+const importBtn = document.getElementById('importBtn') as HTMLButtonElement;
+const importFile = document.getElementById('importFile') as HTMLInputElement;
+const dataStatusEl = document.getElementById('dataStatus') as HTMLDivElement;
 const shortcutPopupEl = document.getElementById('shortcutPopup') as HTMLSpanElement;
 const shortcutPanelEl = document.getElementById('shortcutPanel') as HTMLSpanElement;
 const customizeBtn = document.getElementById('customizeShortcut') as HTMLButtonElement;
@@ -154,6 +165,13 @@ function setRedirectStatus(msg: string, type: 'error' | 'success' | '' = ''): vo
   addRedirectStatusEl.className = type;
 }
 
+let isSearchType = false;
+searchToggleBtn.addEventListener('click', () => {
+  isSearchType = !isSearchType;
+  searchFieldsEl.hidden = !isSearchType;
+  searchToggleBtn.textContent = isSearchType ? '− Remove search shortcut' : '+ Make search shortcut';
+});
+
 function initRedirectForm(tab: chrome.tabs.Tab | undefined): void {
   if (!tab?.url) return;
   redirectUrlInput.value = tab.url;
@@ -165,9 +183,33 @@ function initRedirectForm(tab: chrome.tabs.Tab | undefined): void {
 
 saveRedirectBtn.addEventListener('click', async () => {
   const key = normalizeKey(redirectKeyInput.value);
-  const url = normalizeUrl(redirectUrlInput.value);
 
   if (!key) { setRedirectStatus('Enter a keyword.', 'error'); return; }
+
+  if (isSearchType) {
+    const urlTemplate = redirectUrlTemplateInput.value.trim();
+    if (!urlTemplate.includes('%s')) {
+      setRedirectStatus('Search URL must include %s.', 'error');
+      return;
+    }
+    const fallbackUrl = normalizeUrl(redirectUrlInput.value) || urlTemplate.replace('%s', '');
+    try {
+      await upsertShortcut({ key, url: fallbackUrl, urlTemplate, type: 'parameterized' });
+      setRedirectStatus(`Saved "${key}".`, 'success');
+      redirectKeyInput.value = '';
+      redirectUrlInput.value = '';
+      redirectUrlTemplateInput.value = '';
+      isSearchType = false;
+      searchFieldsEl.hidden = true;
+      searchToggleBtn.textContent = '+ Make search shortcut';
+      await refresh();
+    } catch (err) {
+      setRedirectStatus((err as Error).message, 'error');
+    }
+    return;
+  }
+
+  const url = normalizeUrl(redirectUrlInput.value);
   if (!url) { setRedirectStatus('Enter a URL.', 'error'); return; }
 
   try {
@@ -326,13 +368,17 @@ bundleForm.addEventListener('submit', async (event) => {
 tabSettingsBtn.addEventListener('click', async () => {
   showTab('settings');
 
-  const commands = await chrome.commands.getAll();
+  const [commands, store, localResult] = await Promise.all([
+    chrome.commands.getAll(),
+    getStore(),
+    chrome.storage.local.get(DAILY_KEY),
+  ]);
+
   const panelCmd = commands.find((c) => c.name === 'open-side-panel');
   const popupCmd = commands.find((c) => c.name === '_execute_action');
   shortcutPanelEl.textContent = panelCmd?.shortcut || 'not set';
   shortcutPopupEl.textContent = popupCmd?.shortcut || 'not set';
 
-  const store = await getStore();
   maxShortcutsInput.value = String(store.settings.maxShortcuts);
   filterThresholdInput.value = String(store.settings.filterThreshold);
   staleToggle.checked = store.settings.staleAutoDelete;
@@ -344,6 +390,25 @@ tabSettingsBtn.addEventListener('click', async () => {
   filterThresholdStatusEl.className = '';
   staleStatusEl.textContent = '';
   staleStatusEl.className = '';
+
+  // Weekly usage chart
+  const counts = (localResult[DAILY_KEY] ?? {}) as Record<string, number>;
+  const last7 = Array.from({ length: 7 }, (_, i) => {
+    return new Date(Date.now() - (6 - i) * 86_400_000).toISOString().slice(0, 10);
+  });
+  const weekTotal = last7.reduce((s, d) => s + (counts[d] ?? 0), 0);
+  const max = Math.max(1, ...last7.map(d => counts[d] ?? 0));
+  weeklyChartEl.innerHTML = '';
+  last7.forEach(date => {
+    const bar = document.createElement('div');
+    bar.className = 'week-bar';
+    bar.style.height = `${Math.round(((counts[date] ?? 0) / max) * 40)}px`;
+    bar.title = `${date}: ${counts[date] ?? 0} opens`;
+    weeklyChartEl.appendChild(bar);
+  });
+  weekTotalEl.textContent = `${weekTotal} shortcut open${weekTotal !== 1 ? 's' : ''} this week`;
+
+  dataStatusEl.textContent = '';
 });
 
 customizeBtn.addEventListener('click', () => {
@@ -387,6 +452,63 @@ saveStaleBtn.addEventListener('click', async () => {
   await saveSettings({ ...store.settings, staleAutoDelete: staleToggle.checked, staleDays: days });
   staleStatusEl.textContent = 'Saved.';
   staleStatusEl.className = 'success';
+});
+
+// ── Export / Import ───────────────────────────────────────────────────────────
+exportBtn.addEventListener('click', async () => {
+  const store = await getStore();
+  const payload = { version: 1, shortcuts: Object.values(store.shortcuts), settings: store.settings };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+  a.download = 'omnibar-shortcuts.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+importBtn.addEventListener('click', () => importFile.click());
+importFile.addEventListener('change', async () => {
+  const file = importFile.files?.[0];
+  if (!file) return;
+  try {
+    const payload = JSON.parse(await file.text());
+    if (Array.isArray(payload.shortcuts)) {
+      for (const s of payload.shortcuts) await upsertShortcut(s as Shortcut);
+    }
+    if (payload.settings) await saveSettings(payload.settings);
+    await refresh();
+    dataStatusEl.textContent = `Imported ${payload.shortcuts?.length ?? 0} shortcuts.`;
+  } catch {
+    dataStatusEl.textContent = 'Import failed — invalid file.';
+  }
+  importFile.value = '';
+});
+
+// ── Keyboard navigation ───────────────────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  const active = document.activeElement;
+  const inInput = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
+  if (inInput) return;
+
+  const items = [...listEl.querySelectorAll<HTMLLIElement>('li:not([hidden])')];
+  const focused = active instanceof HTMLLIElement ? active : null;
+  const idx = focused ? items.indexOf(focused) : -1;
+  const target = focused ?? hoveredRow;
+
+  if (e.key === 'j' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    items[Math.min(Math.max(idx, -1) + 1, items.length - 1)]?.focus();
+  } else if (e.key === 'k' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    items[Math.max(idx - 1, 0)]?.focus();
+  } else if ((e.key === 'Enter' || e.key === 'l') && target) {
+    const url = target.dataset.url;
+    if (url) chrome.tabs.update({ url });
+  } else if (e.key === 'e' && target) {
+    target.querySelector<HTMLButtonElement>('.btn-icon:not(.danger)')?.click();
+  } else if ((e.key === 'd' || e.key === 'Delete') && target) {
+    e.preventDefault();
+    target.querySelector<HTMLButtonElement>('.btn-icon.danger')?.click();
+  }
 });
 
 // ── Toggle close via keyboard shortcut ───────────────────────────────────────

@@ -2,6 +2,7 @@ import { DEFAULT_SETTINGS, Shortcut, ShortcutStore, UserSettings } from './types
 
 export const SETTINGS_KEY = 'omnibar_settings';
 export const SHORTCUT_PREFIX = 'omnibar_s_';
+export const DAILY_KEY = 'omnibar_daily';
 
 export function normalizeKey(input: string): string {
   return input
@@ -115,11 +116,29 @@ export async function deleteShortcut(key: string): Promise<ShortcutStore> {
 export async function touchShortcut(key: string): Promise<void> {
   const normalized = normalizeKey(key);
   const storageKey = `${SHORTCUT_PREFIX}${normalized}`;
-  const result = await chrome.storage.sync.get(storageKey);
-  const shortcut = result[storageKey] as Shortcut | undefined;
+  const now = Date.now();
+
+  const [syncResult, localResult] = await Promise.all([
+    chrome.storage.sync.get(storageKey),
+    chrome.storage.local.get(DAILY_KEY),
+  ]);
+
+  const shortcut = syncResult[storageKey] as Shortcut | undefined;
   if (shortcut) {
-    await chrome.storage.sync.set({ [storageKey]: { ...shortcut, lastUsed: Date.now() } });
+    await chrome.storage.sync.set({
+      [storageKey]: { ...shortcut, lastUsed: now, useCount: (shortcut.useCount ?? 0) + 1 },
+    });
   }
+
+  // Rolling 7-day usage counter
+  const today = new Date(now).toISOString().slice(0, 10);
+  const cutoff = new Date(now - 7 * 86_400_000).toISOString().slice(0, 10);
+  const counts = (localResult[DAILY_KEY] ?? {}) as Record<string, number>;
+  counts[today] = (counts[today] ?? 0) + 1;
+  for (const k of Object.keys(counts)) {
+    if (k < cutoff) delete counts[k];
+  }
+  await chrome.storage.local.set({ [DAILY_KEY]: counts });
 }
 
 export async function cleanupStaleShortcuts(): Promise<void> {

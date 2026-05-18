@@ -1,4 +1,4 @@
-export type ShortcutType = 'redirect' | 'bundle';
+export type ShortcutType = 'redirect' | 'bundle' | 'parameterized';
 
 export interface Shortcut {
   key: string;
@@ -6,8 +6,10 @@ export interface Shortcut {
   type: ShortcutType;
   bundleUrls?: string[];
   label?: string;
+  urlTemplate?: string;  // parameterized: 'https://site.com/search?q=%s'
   lastUsed?: number;
   createdAt?: number;
+  useCount?: number;
 }
 
 export interface UserSettings {

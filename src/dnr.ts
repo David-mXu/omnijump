@@ -12,6 +12,11 @@ function buildQueryRegex(key: string): string {
   return `[?&]q=${escapedKey}(?:&|$)`;
 }
 
+function buildParamQueryRegex(key: string): string {
+  const escapedKey = escapeRegex(key);
+  return `[?&]q=${escapedKey}(?:\\+|%20)(.+?)(?:&|$)`;
+}
+
 function resolveShortcutUrl(shortcut: Shortcut): string | null {
   if (shortcut.type === 'bundle') {
     return shortcut.bundleUrls?.[0] ?? shortcut.url ?? null;
@@ -20,27 +25,47 @@ function resolveShortcutUrl(shortcut: Shortcut): string | null {
 }
 
 function buildRules(shortcuts: Shortcut[]): chrome.declarativeNetRequest.Rule[] {
-  return shortcuts.map((shortcut, index) => {
-    const url = resolveShortcutUrl(shortcut);
-    if (!url) {
-      throw new Error(`Shortcut ${shortcut.key} has no target URL.`);
-    }
+  const rules: chrome.declarativeNetRequest.Rule[] = [];
+  let id = 1;
 
-    return {
-      id: index + 1,
+  for (const shortcut of shortcuts) {
+    const url = resolveShortcutUrl(shortcut);
+    if (!url) throw new Error(`Shortcut ${shortcut.key} has no target URL.`);
+
+    // Exact-match rule (no argument, or all non-parameterized types)
+    rules.push({
+      id: id++,
       priority: 1,
       action: {
         type: 'redirect' as chrome.declarativeNetRequest.RuleActionType,
-        redirect: {
-          url,
-        },
+        redirect: { url },
       },
       condition: {
         regexFilter: buildQueryRegex(shortcut.key),
         resourceTypes: ['main_frame'] as chrome.declarativeNetRequest.ResourceType[],
       },
-    };
-  });
+    });
+
+    // Capture-group rule for parameterized shortcuts (keyword + argument)
+    if (shortcut.type === 'parameterized' && shortcut.urlTemplate) {
+      rules.push({
+        id: id++,
+        priority: 2,
+        action: {
+          type: 'redirect' as chrome.declarativeNetRequest.RuleActionType,
+          redirect: {
+            regexSubstitution: shortcut.urlTemplate.replace('%s', '\\1'),
+          },
+        },
+        condition: {
+          regexFilter: buildParamQueryRegex(shortcut.key),
+          resourceTypes: ['main_frame'] as chrome.declarativeNetRequest.ResourceType[],
+        },
+      });
+    }
+  }
+
+  return rules;
 }
 
 export async function rebuildDynamicRules(): Promise<void> {

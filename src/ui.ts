@@ -1,6 +1,8 @@
 import { deleteShortcut, normalizeKey, upsertShortcut } from './storage';
 import { Shortcut } from './types';
 
+export let hoveredRow: HTMLLIElement | null = null;
+
 export function normalizeUrl(input: string): string {
   const s = input.trim();
   if (!s || /^https?:\/\//i.test(s)) return s;
@@ -77,18 +79,36 @@ export function buildShortcutRow(
     badge.className = 'badge';
     badge.textContent = 'bundle';
     keyLine.appendChild(badge);
+  } else if (shortcut.type === 'parameterized') {
+    const badge = document.createElement('span');
+    badge.className = 'badge badge-search';
+    badge.textContent = 'search';
+    keyLine.appendChild(badge);
   }
 
   const urlLine = document.createElement('div');
   urlLine.className = 'url';
   if (shortcut.type === 'bundle') {
     urlLine.textContent = `${shortcut.bundleUrls?.length ?? 0} URLs`;
+  } else if (shortcut.type === 'parameterized') {
+    urlLine.textContent = shortcut.urlTemplate ?? displayUrl(shortcut.url);
+    urlLine.title = shortcut.urlTemplate ?? shortcut.url;
   } else {
     urlLine.textContent = displayUrl(shortcut.url);
     urlLine.title = shortcut.url;
   }
 
-  item.append(keyLine, urlLine);
+  const stats = document.createElement('div');
+  stats.className = 'stats';
+  const parts: string[] = [];
+  if (shortcut.useCount) parts.push(`${shortcut.useCount}×`);
+  if (shortcut.lastUsed) {
+    const days = Math.floor((Date.now() - shortcut.lastUsed) / 86_400_000);
+    parts.push(days === 0 ? 'today' : `${days}d ago`);
+  }
+  if (parts.length) stats.textContent = parts.join(' · ');
+
+  item.append(keyLine, urlLine, stats);
 
   const editBtn = document.createElement('button');
   editBtn.type = 'button';
@@ -156,6 +176,11 @@ export function buildShortcutRow(
   cb.type = 'checkbox';
   cb.className = 'select-cb';
   cb.dataset.key = shortcut.key;
+
+  li.tabIndex = 0;
+  li.dataset.url = shortcut.url;
+  li.addEventListener('mouseenter', () => { hoveredRow = li; });
+  li.addEventListener('mouseleave', () => { if (hoveredRow === li) hoveredRow = null; });
 
   displayRow.prepend(cb);
 

@@ -278,6 +278,32 @@
         border-top: 1px solid #e0e0e0;
       }
 
+      /* ── Stats (per-row usage) ───────────────────────────────────────────── */
+      .stats { font-size: 10px; color: #bbb; margin-top: 1px; }
+
+      /* ── Keyboard focus ──────────────────────────────────────────────────── */
+      li:focus { outline: none; background: #f5f7ff; }
+      li:focus .btn-icon { opacity: 1; }
+
+      /* ── Search badge variant ────────────────────────────────────────────── */
+      .badge-search { background: #e8f5e9; color: #2e7d32; }
+
+      /* ── Search shortcut toggle ──────────────────────────────────────────── */
+      .btn-link {
+        background: none; border: none; color: #4c6ef5; font-size: 11px;
+        padding: 2px 0; cursor: pointer; text-decoration: underline;
+      }
+      #searchFields { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+      #searchFields small { font-size: 10px; color: #999; }
+
+      /* ── Weekly usage chart ──────────────────────────────────────────────── */
+      #weeklyChart {
+        display: flex; align-items: flex-end; gap: 4px;
+        height: 44px; margin-top: 8px;
+      }
+      .week-bar { flex: 1; background: #4c6ef5; border-radius: 2px; min-height: 2px; }
+      #weekTotal { font-size: 11px; color: #888; margin-top: 4px; }
+
       /* ── Settings ─────────────────────────────────────────────────────────── */
       h2 { font-size: 13px; font-weight: 600; margin: 20px 0 8px; color: #333; }
       h2:first-child { margin-top: 0; }
@@ -335,6 +361,11 @@
         <input id="redirectUrl" type="text" placeholder="google.com or https://..." />
         <button type="button" id="saveRedirect" class="btn-primary">+ Add</button>
         <div id="addRedirectStatus"></div>
+        <button type="button" id="searchToggle" class="btn-link">+ Make search shortcut</button>
+        <div id="searchFields" hidden>
+          <input id="redirectUrlTemplate" type="text" placeholder="https://site.com/search?q=%s" />
+          <small>Use %s where the query goes. The URL above is the fallback when no query is typed.</small>
+        </div>
       </div>
       <input id="filterInput" type="search" placeholder="Filter shortcuts…" hidden>
       <div class="list-header">
@@ -409,6 +440,18 @@
         <button type="button" id="saveFilterThreshold" class="btn-primary btn-sm">Save</button>
       </div>
       <div id="filterThresholdStatus" role="status"></div>
+
+      <h2>This Week</h2>
+      <div id="weeklyChart"></div>
+      <div id="weekTotal"></div>
+
+      <h2>Data</h2>
+      <div class="settings-row">
+        <button type="button" id="exportBtn" class="btn-secondary btn-sm">Export shortcuts</button>
+        <button type="button" id="importBtn" class="btn-secondary btn-sm">Import shortcuts</button>
+        <input type="file" id="importFile" accept=".json" hidden>
+      </div>
+      <div id="dataStatus" style="font-size:11px;margin-top:6px;min-height:14px;color:#888;"></div>
 
       <h2>Auto-Delete Stale Shortcuts</h2>
       <div class="settings-row" style="flex-wrap:wrap;gap:6px">
