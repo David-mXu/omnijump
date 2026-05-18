@@ -1,4 +1,4 @@
-import { getStore, upsertShortcut } from './storage';
+import { getStore, normalizeKey, upsertShortcut } from './storage';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
 import { Suggestion } from './types';
 
@@ -75,7 +75,7 @@ form?.addEventListener('submit', async (event) => {
 		return;
 	}
 
-	const key = keyInput.value.trim();
+	const key = normalizeKey(keyInput.value);
 	const url = normalizeUrl(urlInput.value);
 
 	if (!key || !url) {

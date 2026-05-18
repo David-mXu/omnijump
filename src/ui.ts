@@ -1,4 +1,4 @@
-import { deleteShortcut, normalizeKey, upsertShortcut } from './storage';
+import { deleteShortcut, normalizeKey, renameShortcut, upsertShortcut } from './storage';
 import { Shortcut } from './types';
 
 export let hoveredRow: HTMLLIElement | null = null;
@@ -36,21 +36,20 @@ async function saveEdit(
   }
 
   try {
-    if (newKey !== original.key) {
-      await deleteShortcut(original.key);
-    }
+    let updated: Shortcut;
     if (original.type === 'redirect') {
       const url = normalizeUrl(urlOrLabel);
       if (!url) { statusEl.textContent = 'Enter a URL.'; return; }
-      await upsertShortcut({ key: newKey, url, type: 'redirect' });
+      updated = { ...original, key: newKey, url };
     } else {
-      await upsertShortcut({
-        key: newKey,
-        url: original.url,
-        type: 'bundle',
-        bundleUrls: original.bundleUrls,
-        label: urlOrLabel.trim() || undefined,
-      });
+      updated = { ...original, key: newKey, label: urlOrLabel.trim() || undefined };
+    }
+
+    if (newKey !== original.key) {
+      // Write new key first so a storage failure can't lose the original.
+      await renameShortcut(original.key, updated);
+    } else {
+      await upsertShortcut(updated);
     }
     await onRender();
   } catch (err) {
