@@ -74,6 +74,7 @@ const staleToggle = document.getElementById('staleToggle') as HTMLInputElement;
 const staleDaysInput = document.getElementById('staleDaysInput') as HTMLInputElement;
 const saveStaleBtn = document.getElementById('saveStale') as HTMLButtonElement;
 const staleStatusEl = document.getElementById('staleStatus') as HTMLDivElement;
+const darkModeToggle = document.getElementById('darkModeToggle') as HTMLInputElement;
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
 type TabName = 'shortcuts' | 'bundle' | 'settings';
@@ -95,7 +96,7 @@ tabBundleBtn.addEventListener('click', () => showTab('bundle'));
 // refresh() reads storage and updates them; renderList() reads only the cache.
 // This means filter-input keystrokes never hit storage.
 let shortcutCache: Shortcut[] = [];
-let settingsCache = { maxShortcuts: 500, filterThreshold: 25 };
+let settingsCache = { maxShortcuts: 500, filterThreshold: 25, darkMode: false };
 
 function renderList(): void {
   filterInput.hidden = shortcutCache.length < settingsCache.filterThreshold;
@@ -125,7 +126,8 @@ function renderList(): void {
 async function refresh(): Promise<void> {
   const store = await getStore();
   shortcutCache = Object.values(store.shortcuts);
-  settingsCache = { maxShortcuts: store.settings.maxShortcuts, filterThreshold: store.settings.filterThreshold };
+  settingsCache = { maxShortcuts: store.settings.maxShortcuts, filterThreshold: store.settings.filterThreshold, darkMode: store.settings.darkMode ?? false };
+  document.body.classList.toggle('dark', settingsCache.darkMode);
   renderList();
 }
 
@@ -438,6 +440,7 @@ tabSettingsBtn.addEventListener('click', async () => {
   filterThresholdInput.value = String(store.settings.filterThreshold);
   staleToggle.checked = store.settings.staleAutoDelete;
   staleDaysInput.value = String(store.settings.staleDays);
+  darkModeToggle.checked = store.settings.darkMode ?? false;
 
   settingsStatusEl.textContent = '';
   settingsStatusEl.className = '';
@@ -507,6 +510,12 @@ saveStaleBtn.addEventListener('click', async () => {
   await saveSettings({ ...store.settings, staleAutoDelete: staleToggle.checked, staleDays: days });
   staleStatusEl.textContent = 'Saved.';
   staleStatusEl.className = 'success';
+});
+
+darkModeToggle.addEventListener('change', async () => {
+  const store = await getStore();
+  await saveSettings({ ...store.settings, darkMode: darkModeToggle.checked });
+  document.body.classList.toggle('dark', darkModeToggle.checked);
 });
 
 // ── Export / Import ───────────────────────────────────────────────────────────

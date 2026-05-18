@@ -17,6 +17,7 @@ export interface UserSettings {
   filterThreshold: number;
   staleAutoDelete: boolean;
   staleDays: number;
+  darkMode: boolean;
 }
 
 export interface ShortcutStore {
@@ -29,6 +30,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   filterThreshold: 25,
   staleAutoDelete: true,
   staleDays: 90,
+  darkMode: false,
 };
 
 export interface Suggestion {
