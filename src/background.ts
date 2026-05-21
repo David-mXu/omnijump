@@ -1,5 +1,5 @@
 import { rebuildDynamicRules } from './dnr';
-import { SETTINGS_KEY, SHORTCUT_PREFIX, cleanupStaleShortcuts, getStore, migrateFromLegacyStorage, normalizeKey, touchShortcut, upsertShortcut } from './storage';
+import { SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, cleanupStaleShortcuts, getDismissedHosts, getStore, migrateFromLegacyStorage, normalizeKey, touchShortcut, upsertShortcut } from './storage';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
 import { ShortcutStore, Suggestion } from './types';
 
@@ -11,9 +11,20 @@ async function syncRules(): Promise<void> {
   }
 }
 
-const TIP_THRESHOLD = 3;
+const TIP_THRESHOLD = 5;
 
 const SEARCH_PARAMS = ['q', 'query', 'search_query', 'search', 'k', 'keyword', 's', 'text'];
+
+const SEARCH_ENGINE_BLOCKLIST = new Set([
+  'bing.com', 'duckduckgo.com', 'yahoo.com', 'baidu.com',
+  'yandex.com', 'yandex.ru', 'startpage.com', 'ecosia.org',
+  'ask.com', 'brave.com', 'kagi.com', 'perplexity.ai',
+]);
+
+function isBlocklisted(host: string): boolean {
+  if (host.startsWith('google.')) return true;
+  return SEARCH_ENGINE_BLOCKLIST.has(host);
+}
 
 function detectSearch(url: string): { param: string; baseUrl: string } | null {
   try {
@@ -133,11 +144,36 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
     return;
   }
 
+  if (isBlocklisted(host)) {
+    sessions[tabId] = null;
+    await chrome.storage.session.set({ tabActiveSessions: sessions });
+    await chrome.action.setBadgeText({ tabId, text: '' });
+    await chrome.storage.session.remove(`suggestion_${tabId}`);
+    return;
+  }
+
   const store = await getStore();
+
+  if (!store.settings.smartSuggestions) {
+    sessions[tabId] = null;
+    await chrome.storage.session.set({ tabActiveSessions: sessions });
+    await chrome.action.setBadgeText({ tabId, text: '' });
+    await chrome.storage.session.remove(`suggestion_${tabId}`);
+    return;
+  }
+
   const alreadyCovered = Object.values(store.shortcuts).some(
     (s) => s.url.startsWith(hit.baseUrl)
   );
   if (alreadyCovered) {
+    sessions[tabId] = null;
+    await chrome.storage.session.set({ tabActiveSessions: sessions });
+    await chrome.action.setBadgeText({ tabId, text: '' });
+    return;
+  }
+
+  const dismissed = await getDismissedHosts();
+  if (dismissed.has(host)) {
     sessions[tabId] = null;
     await chrome.storage.session.set({ tabActiveSessions: sessions });
     await chrome.action.setBadgeText({ tabId, text: '' });
@@ -156,7 +192,7 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
   if (total >= TIP_THRESHOLD) {
     const siteName = formatSiteName(host);
     const key = await buildSuggestedKey(host, store);
-    const suggestion: Suggestion = { key, url: hit.baseUrl, siteName };
+    const suggestion: Suggestion = { key, url: hit.baseUrl, siteName, host };
     await chrome.storage.session.set({ [`suggestion_${tabId}`]: suggestion });
     await chrome.action.setBadgeBackgroundColor({ color: '#4c6ef5' });
     await chrome.action.setBadgeText({ tabId, text: 'TIP' });

@@ -3,11 +3,14 @@ import { createChromeMock } from './test/chrome-mock';
 import {
   SETTINGS_KEY,
   SHORTCUT_PREFIX,
+  DISMISSED_KEY,
   getStore,
   upsertShortcut,
   deleteShortcut,
   saveSettings,
   migrateFromLegacyStorage,
+  getDismissedHosts,
+  addDismissedHost,
 } from './storage';
 import { DEFAULT_SETTINGS } from './types';
 
@@ -169,5 +172,47 @@ describe('migrateFromLegacyStorage', () => {
     await migrateFromLegacyStorage();
     const shortcutKeys = Object.keys(syncStore).filter(k => k.startsWith(SHORTCUT_PREFIX));
     expect(shortcutKeys).toHaveLength(0);
+  });
+});
+
+describe('getDismissedHosts', () => {
+  it('returns empty Set when nothing stored', async () => {
+    expect((await getDismissedHosts()).size).toBe(0);
+  });
+
+  it('returns Set of stored hosts', async () => {
+    syncStore[DISMISSED_KEY] = { 'github.com': true, 'reddit.com': true };
+    const hosts = await getDismissedHosts();
+    expect(hosts.has('github.com')).toBe(true);
+    expect(hosts.has('reddit.com')).toBe(true);
+  });
+
+  it('does not include unrelated keys', async () => {
+    syncStore[DISMISSED_KEY] = { 'example.com': true };
+    syncStore[SETTINGS_KEY] = { ...DEFAULT_SETTINGS };
+    const hosts = await getDismissedHosts();
+    expect(hosts.size).toBe(1);
+    expect(hosts.has('example.com')).toBe(true);
+  });
+});
+
+describe('addDismissedHost', () => {
+  it('writes host under DISMISSED_KEY', async () => {
+    await addDismissedHost('github.com');
+    expect((syncStore[DISMISSED_KEY] as Record<string, true>)['github.com']).toBe(true);
+  });
+
+  it('appends without overwriting existing hosts', async () => {
+    syncStore[DISMISSED_KEY] = { 'reddit.com': true };
+    await addDismissedHost('github.com');
+    const stored = syncStore[DISMISSED_KEY] as Record<string, true>;
+    expect(stored['reddit.com']).toBe(true);
+    expect(stored['github.com']).toBe(true);
+  });
+
+  it('is idempotent', async () => {
+    await addDismissedHost('github.com');
+    await addDismissedHost('github.com');
+    expect(Object.keys(syncStore[DISMISSED_KEY] as object)).toHaveLength(1);
   });
 });

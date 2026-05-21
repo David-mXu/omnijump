@@ -75,6 +75,7 @@ const staleDaysInput = document.getElementById('staleDaysInput') as HTMLInputEle
 const saveStaleBtn = document.getElementById('saveStale') as HTMLButtonElement;
 const staleStatusEl = document.getElementById('staleStatus') as HTMLDivElement;
 const darkModeToggle = document.getElementById('darkModeToggle') as HTMLInputElement;
+const smartSuggestionsToggle = document.getElementById('smartSuggestionsToggle') as HTMLInputElement;
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
 type TabName = 'shortcuts' | 'bundle' | 'settings';
@@ -428,6 +429,7 @@ tabSettingsBtn.addEventListener('click', async () => {
   staleToggle.checked = store.settings.staleAutoDelete;
   staleDaysInput.value = String(store.settings.staleDays);
   darkModeToggle.checked = store.settings.darkMode ?? false;
+  smartSuggestionsToggle.checked = store.settings.smartSuggestions ?? false;
 
   settingsStatusEl.textContent = '';
   settingsStatusEl.className = '';
@@ -502,6 +504,11 @@ darkModeToggle.addEventListener('change', async () => {
   const store = await getStore();
   await saveSettings({ ...store.settings, darkMode: darkModeToggle.checked });
   document.body.classList.toggle('dark', darkModeToggle.checked);
+});
+
+smartSuggestionsToggle.addEventListener('change', async () => {
+  const store = await getStore();
+  await saveSettings({ ...store.settings, smartSuggestions: smartSuggestionsToggle.checked });
 });
 
 // ── Export / Import ───────────────────────────────────────────────────────────

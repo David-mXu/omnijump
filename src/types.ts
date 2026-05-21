@@ -18,6 +18,7 @@ export interface UserSettings {
   staleAutoDelete: boolean;
   staleDays: number;
   darkMode: boolean;
+  smartSuggestions: boolean;
 }
 
 export interface ShortcutStore {
@@ -31,10 +32,12 @@ export const DEFAULT_SETTINGS: UserSettings = {
   staleAutoDelete: true,
   staleDays: 90,
   darkMode: false,
+  smartSuggestions: false,
 };
 
 export interface Suggestion {
   key: string;
   url: string;
   siteName: string;
+  host: string;
 }

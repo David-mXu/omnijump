@@ -1,4 +1,4 @@
-import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, deleteShortcut, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
+import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, deleteShortcut, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
 import { buildShortcutRow, hoveredRow, normalizeUrl } from './ui';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
 import { Shortcut, Suggestion } from './types';
@@ -75,6 +75,7 @@ const staleDaysInput = document.getElementById('staleDaysInput') as HTMLInputEle
 const saveStaleBtn = document.getElementById('saveStale') as HTMLButtonElement;
 const staleStatusEl = document.getElementById('staleStatus') as HTMLDivElement;
 const darkModeToggle = document.getElementById('darkModeToggle') as HTMLInputElement;
+const smartSuggestionsToggle = document.getElementById('smartSuggestionsToggle') as HTMLInputElement;
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
 type TabName = 'shortcuts' | 'bundle' | 'settings';
@@ -441,6 +442,7 @@ tabSettingsBtn.addEventListener('click', async () => {
   staleToggle.checked = store.settings.staleAutoDelete;
   staleDaysInput.value = String(store.settings.staleDays);
   darkModeToggle.checked = store.settings.darkMode ?? false;
+  smartSuggestionsToggle.checked = store.settings.smartSuggestions ?? false;
 
   settingsStatusEl.textContent = '';
   settingsStatusEl.className = '';
@@ -516,6 +518,11 @@ darkModeToggle.addEventListener('change', async () => {
   const store = await getStore();
   await saveSettings({ ...store.settings, darkMode: darkModeToggle.checked });
   document.body.classList.toggle('dark', darkModeToggle.checked);
+});
+
+smartSuggestionsToggle.addEventListener('change', async () => {
+  const store = await getStore();
+  await saveSettings({ ...store.settings, smartSuggestions: smartSuggestionsToggle.checked });
 });
 
 // ── Export / Import ───────────────────────────────────────────────────────────
@@ -646,6 +653,9 @@ async function checkTipSuggestion(tab: chrome.tabs.Tab | undefined): Promise<voi
   dismissSuggestionBtn.onclick = async () => {
     await chrome.storage.session.remove(`suggestion_${tabId}`);
     await chrome.action.setBadgeText({ tabId, text: '' });
+    if (suggestion.host) {
+      await addDismissedHost(suggestion.host);
+    }
     suggestionEl.hidden = true;
   };
 }

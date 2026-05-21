@@ -3,6 +3,19 @@ import { DEFAULT_SETTINGS, Shortcut, ShortcutStore, UserSettings } from './types
 export const SETTINGS_KEY = 'omnibar_settings';
 export const SHORTCUT_PREFIX = 'omnibar_s_';
 export const DAILY_KEY = 'omnibar_daily';
+export const DISMISSED_KEY = 'omnibar_dismissed';
+
+export async function getDismissedHosts(): Promise<Set<string>> {
+  const r = await chrome.storage.sync.get(DISMISSED_KEY);
+  const raw = (r[DISMISSED_KEY] ?? {}) as Record<string, true>;
+  return new Set(Object.keys(raw));
+}
+
+export async function addDismissedHost(host: string): Promise<void> {
+  const r = await chrome.storage.sync.get(DISMISSED_KEY);
+  const existing = (r[DISMISSED_KEY] ?? {}) as Record<string, true>;
+  await chrome.storage.sync.set({ [DISMISSED_KEY]: { ...existing, [host]: true } });
+}
 
 export function normalizeKey(input: string): string {
   return input
