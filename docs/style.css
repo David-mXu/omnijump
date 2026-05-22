@@ -17,7 +17,7 @@ body {
   transition: background-color 0.2s, color 0.2s;
 }
 
-body[data-theme="dark"] {
+:root[data-theme="dark"] body {
   color: #e0e0e0;
   background-color: #1e1e1e;
 }
@@ -43,23 +43,20 @@ nav {
   margin-bottom: 2em;
   font-size: 0.95rem;
   display: flex;
-  flex-wrap: nowrap;
-  gap: 1.2em;
-  overflow-x: auto;
-  white-space: nowrap;
+  flex-wrap: wrap;
+  gap: 1em;
   align-items: center;
   justify-content: space-between;
 }
 
 nav > div {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 1.2em;
-  overflow-x: auto;
-  white-space: nowrap;
+  flex-wrap: wrap;
+  gap: 1em;
+  align-items: center;
 }
 
-nav[data-theme="dark"] {
+:root[data-theme="dark"] nav {
   border-bottom-color: #444;
 }
 
@@ -79,11 +76,11 @@ nav a.active {
   text-decoration: none;
 }
 
-nav[data-theme="dark"] a {
+:root[data-theme="dark"] nav a {
   color: #58a6ff;
 }
 
-nav[data-theme="dark"] a.active {
+:root[data-theme="dark"] nav a.active {
   color: #e0e0e0;
 }
 
@@ -101,12 +98,12 @@ nav[data-theme="dark"] a.active {
   background-color: #f6f8fa;
 }
 
-nav[data-theme="dark"] .theme-toggle {
+:root[data-theme="dark"] .theme-toggle {
   border-color: #444;
   color: #e0e0e0;
 }
 
-nav[data-theme="dark"] .theme-toggle:hover {
+:root[data-theme="dark"] .theme-toggle:hover {
   background-color: #2d2d2d;
 }
 
@@ -118,7 +115,7 @@ code {
   font-size: 0.9em;
 }
 
-body[data-theme="dark"] code {
+:root[data-theme="dark"] code {
   background-color: #2d2d2d;
   color: #e0e0e0;
 }
@@ -132,7 +129,7 @@ kbd {
   font-size: 0.85em;
 }
 
-body[data-theme="dark"] kbd {
+:root[data-theme="dark"] kbd {
   background-color: #2d2d2d;
   border-color: #444;
   color: #e0e0e0;
@@ -156,12 +153,12 @@ table th {
   font-weight: 600;
 }
 
-body[data-theme="dark"] table th,
-body[data-theme="dark"] table td {
+:root[data-theme="dark"] table th,
+:root[data-theme="dark"] table td {
   border-color: #444;
 }
 
-body[data-theme="dark"] table th {
+:root[data-theme="dark"] table th {
   background-color: #2d2d2d;
   color: #e0e0e0;
 }
