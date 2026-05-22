@@ -7,15 +7,18 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <nav>
-    <a href="index.html">Docs</a>
-    <a href="getting-started.html">Getting Started</a>
-    <a href="redirect-shortcuts.html">Redirect Shortcuts</a>
-    <a href="search-shortcuts.html">Search Shortcuts</a>
-    <a href="tab-bundles.html">Tab Bundles</a>
-    <a href="settings.html" class="active">Settings</a>
-    <a href="faq.html">FAQ</a>
-    <a href="privacy.html">Privacy</a>
+  <nav id="navbar">
+    <div>
+      <a href="index.html">Docs</a>
+      <a href="getting-started.html">Getting Started</a>
+      <a href="redirect-shortcuts.html">Redirect Shortcuts</a>
+      <a href="search-shortcuts.html">Search Shortcuts</a>
+      <a href="tab-bundles.html">Tab Bundles</a>
+      <a href="settings.html" class="active">Settings</a> class="active"
+      <a href="faq.html">FAQ</a>
+      <a href="privacy.html">Privacy</a>
+    </div>
+    <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode">🌙</button>
   </nav>
 
   <h1>Settings</h1>
@@ -103,5 +106,6 @@
 
   <h2>Sync Across Devices</h2>
   <p>All shortcuts and settings sync automatically to other Chrome devices where you're signed in. Changes propagate within a few seconds with no manual action needed. See the <a href="privacy.html">Privacy Policy</a> for how your data is stored.</p>
+$SCRIPT_CONTENT
 </body>
 </html>

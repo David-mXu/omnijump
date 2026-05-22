@@ -7,15 +7,18 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <nav>
-    <a href="index.html">Docs</a>
-    <a href="getting-started.html" class="active">Getting Started</a>
-    <a href="redirect-shortcuts.html">Redirect Shortcuts</a>
-    <a href="search-shortcuts.html">Search Shortcuts</a>
-    <a href="tab-bundles.html">Tab Bundles</a>
-    <a href="settings.html">Settings</a>
-    <a href="faq.html">FAQ</a>
-    <a href="privacy.html">Privacy</a>
+  <nav id="navbar">
+    <div>
+      <a href="index.html">Docs</a>
+      <a href="getting-started.html" class="active">Getting Started</a>
+      <a href="redirect-shortcuts.html">Redirect Shortcuts</a>
+      <a href="search-shortcuts.html">Search Shortcuts</a>
+      <a href="tab-bundles.html">Tab Bundles</a>
+      <a href="settings.html">Settings</a>
+      <a href="faq.html">FAQ</a>
+      <a href="privacy.html">Privacy</a>
+    </div>
+    <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode">🌙</button>
   </nav>
 
   <h1>Getting Started</h1>
@@ -57,5 +60,36 @@
   </ul>
 
   <p>Running into an issue? Check the <a href="faq.html">FAQ</a>.</p>
+
+  <script>
+    function initTheme() {
+      const stored = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const theme = stored || (prefersDark ? 'dark' : 'light');
+
+      document.documentElement.setAttribute('data-theme', theme);
+      document.body.setAttribute('data-theme', theme);
+      document.getElementById('navbar').setAttribute('data-theme', theme);
+      updateToggle(theme);
+    }
+
+    function updateToggle(theme) {
+      const toggle = document.getElementById('theme-toggle');
+      toggle.textContent = theme === 'dark' ? '☀️' : '🌙';
+    }
+
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+      const current = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      const next = current === 'dark' ? 'light' : 'dark';
+
+      localStorage.setItem('theme', next);
+      document.documentElement.setAttribute('data-theme', next);
+      document.body.setAttribute('data-theme', next);
+      document.getElementById('navbar').setAttribute('data-theme', next);
+      updateToggle(next);
+    });
+
+    initTheme();
+  </script>
 </body>
 </html>
