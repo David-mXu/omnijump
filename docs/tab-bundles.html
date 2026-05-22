@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tab Bundles — OmniJump</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav>
+    <a href="index.html">Docs</a>
+    <a href="getting-started.html">Getting Started</a>
+    <a href="redirect-shortcuts.html">Redirect Shortcuts</a>
+    <a href="tab-bundles.html" class="active">Tab Bundles</a>
+    <a href="settings.html">Settings</a>
+    <a href="privacy.html">Privacy</a>
+  </nav>
+
+  <h1>Tab Bundles</h1>
+  <p>A tab bundle saves multiple URLs under a single keyword. Type the keyword in the address bar to open all of them at once — the first URL in a new tab, the rest as background tabs.</p>
+
+  <h2>When to Use Bundles</h2>
+  <p>Tab bundles are perfect for:</p>
+  <ul>
+    <li><strong>Daily workflows:</strong> Open all your work tools with one keyword (Gmail, Slack, Jira, Notion, etc.)</li>
+    <li><strong>Project dashboards:</strong> Open all monitoring/analytics tools for a project</li>
+    <li><strong>Research:</strong> Quickly open reference docs, tutorials, and related articles</li>
+    <li><strong>Shopping:</strong> Compare prices across multiple sites with one keyword</li>
+  </ul>
+
+  <h2>Creating a Tab Bundle</h2>
+  <ol>
+    <li>Open the OmniJump side panel.</li>
+    <li>Click the <strong>"New Bundle"</strong> tab.</li>
+    <li>Enter a <strong>keyword</strong> (e.g., <code>work</code>, <code>research</code>).</li>
+    <li>Optionally add a <strong>label</strong> to describe what the bundle does.</li>
+    <li>Add URLs to the list (see below).</li>
+    <li>Click <strong>Save Bundle</strong>.</li>
+  </ol>
+
+  <h2>Adding URLs to Your Bundle</h2>
+  <p>You have three ways to add URLs:</p>
+
+  <h3>1. Type URLs Directly</h3>
+  <p>Click in the URL list and type or paste URLs, one per line. You can edit or delete any URL by clicking it.</p>
+
+  <h3>2. Add All Open Tabs</h3>
+  <p>Click the <strong>"Add all open tabs"</strong> button to instantly add all HTTP(S) tabs from your current window to the bundle.</p>
+  <ul>
+    <li>Only browser tabs are added (not other apps).</li>
+    <li>Only HTTP(S) URLs are included (not <code>chrome://</code>, <code>about:</code>, etc.).</li>
+    <li>You can remove individual URLs after adding them.</li>
+  </ul>
+
+  <h3>3. Pick Specific Tabs</h3>
+  <p>Click <strong>"Pick tabs..."</strong> to see a list of all open tabs with checkboxes. Select the ones you want and click <strong>Save</strong>. Each tab shows its favicon and title.</p>
+
+  <h2>Reorder URLs</h2>
+  <p>Drag URLs within the list to reorder them. The order matters because:</p>
+  <ul>
+    <li>The <strong>first URL</strong> opens in a new tab (the one that gets focus).</li>
+    <li>All other URLs open as background tabs.</li>
+  </ul>
+
+  <h2>Using a Tab Bundle</h2>
+  <p>Once saved, type the bundle's keyword in the address bar and press Enter:</p>
+  <ul>
+    <li>Type: <code>work</code> → Opens Gmail, then opens Slack, Jira, Notion as background tabs</li>
+    <li>Type: <code>research</code> → Opens your primary research site, then other resources</li>
+  </ul>
+  <p>All URLs open instantly in the same window.</p>
+
+  <h2>Editing a Bundle</h2>
+  <p>In the side panel's shortcut list, bundles appear with a bundle icon. Click one to edit:</p>
+  <ul>
+    <li>Change the keyword or label.</li>
+    <li>Add, remove, or reorder URLs.</li>
+    <li>Press <strong>Enter</strong> or click <strong>Save</strong> to save changes.</li>
+  </ul>
+
+  <h2>Deleting a Bundle</h2>
+  <p>Click the <strong>trash icon</strong> next to a bundle to delete it.</p>
+
+  <h2>Bundle vs. Redirect Shortcuts</h2>
+  <table>
+    <tr>
+      <th></th>
+      <th>Redirect Shortcut</th>
+      <th>Tab Bundle</th>
+    </tr>
+    <tr>
+      <td><strong>URLs</strong></td>
+      <td>One URL</td>
+      <td>Multiple URLs</td>
+    </tr>
+    <tr>
+      <td><strong>Use case</strong></td>
+      <td>Jump to a single site</td>
+      <td>Open a workflow or project</td>
+    </tr>
+    <tr>
+      <td><strong>Search</strong></td>
+      <td>Can use <code>%s</code> for searching</td>
+      <td>No search functionality</td>
+    </tr>
+    <tr>
+      <td><strong>Tabs opened</strong></td>
+      <td>1 tab</td>
+      <td>Multiple tabs (first focused)</td>
+    </tr>
+  </table>
+
+  <h2>Tips & Tricks</h2>
+  <ul>
+    <li><strong>Organize by context:</strong> Create separate bundles for different areas (work, personal, hobby projects).</li>
+    <li><strong>Use meaningful keywords:</strong> <code>work</code>, <code>urgent</code>, <code>daily-reads</code> are easier to remember than random combinations.</li>
+    <li><strong>Label your bundles:</strong> A short label (e.g., "Daily standup" or "Client project") helps you remember what each bundle does months later.</li>
+    <li><strong>Start with fewer URLs:</strong> You can always add more later. Start with 3-5 essential URLs per bundle.</li>
+  </ul>
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings — OmniJump</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav>
+    <a href="index.html">Docs</a>
+    <a href="getting-started.html">Getting Started</a>
+    <a href="redirect-shortcuts.html">Redirect Shortcuts</a>
+    <a href="tab-bundles.html">Tab Bundles</a>
+    <a href="settings.html" class="active">Settings</a>
+    <a href="privacy.html">Privacy</a>
+  </nav>
+
+  <h1>Settings</h1>
+  <p>Open the Settings tab in the OmniJump side panel to configure how the extension behaves.</p>
+
+  <h2>Dark Mode</h2>
+  <p>Toggle dark mode for the OmniJump interface. This affects the popup, side panel, and options page.</p>
+  <ul>
+    <li><strong>Off:</strong> Light theme (default)</li>
+    <li><strong>On:</strong> Dark theme</li>
+  </ul>
+
+  <h2>Smart Suggestions</h2>
+  <p>When enabled, OmniJump watches your search activity. After visiting a search engine or site 3 times, it suggests creating a shortcut for it.</p>
+  <ul>
+    <li>A dismissable banner appears: "You often search {Site}. Save '{keyword}' as a shortcut?"</li>
+    <li>The suggestion pre-fills the shortcut form for you.</li>
+    <li>Toggle on/off anytime — dismissed suggestions are forgotten after the session.</li>
+  </ul>
+
+  <h2>Keyboard Shortcut</h2>
+  <p>Configure a keyboard shortcut to instantly open the OmniJump side panel.</p>
+  <ul>
+    <li>The current shortcut is displayed (e.g., <kbd>Ctrl+Shift+J</kbd>).</li>
+    <li>Click <strong>"Customize"</strong> to change it.</li>
+    <li>You'll be taken to <code>chrome://extensions/shortcuts</code> where you can assign any key combination.</li>
+  </ul>
+
+  <h2>Max Shortcuts</h2>
+  <p>Set the maximum number of shortcuts you can create. Choose between 1 and 500.</p>
+  <ul>
+    <li><strong>Default:</strong> 100</li>
+    <li>Once you reach the limit, you'll need to delete shortcuts before creating new ones.</li>
+    <li>Useful for keeping your shortcuts list lean and organized.</li>
+  </ul>
+
+  <h2>Filter Bar Threshold</h2>
+  <p>The filter bar (search by keyword or URL) appears once your shortcut count exceeds this threshold.</p>
+  <ul>
+    <li><strong>Default:</strong> 25 shortcuts</li>
+    <li>If you have 24 shortcuts, the filter bar is hidden. Once you add the 25th, it appears.</li>
+    <li>Lower this number to show the filter bar earlier; raise it to keep the interface simpler with fewer shortcuts.</li>
+  </ul>
+
+  <h2>Auto-Delete Stale Shortcuts</h2>
+  <p>Automatically remove shortcuts you haven't used in a long time.</p>
+
+  <h3>Enable/Disable</h3>
+  <p>Toggle auto-delete on or off.</p>
+
+  <h3>Days Until Deletion</h3>
+  <p>Choose how many days a shortcut can go unused before it's automatically deleted. Options range from 7 to 365 days.</p>
+  <ul>
+    <li><strong>7 days:</strong> Aggressive — good if you create many test shortcuts.</li>
+    <li><strong>30 days:</strong> Moderate — default for most users.</li>
+    <li><strong>90 days:</strong> Conservative — keep shortcuts longer.</li>
+    <li><strong>365 days:</strong> Very conservative — only delete after a year of no use.</li>
+  </ul>
+
+  <h3>Grace Period for New Shortcuts</h3>
+  <p>Brand new shortcuts (no usage yet) get a grace period. They won't be deleted immediately even if auto-delete is on. Instead, their first "use" timestamp is set when created, giving them a full grace period to be used before they're eligible for deletion.</p>
+
+  <h2>Usage Chart</h2>
+  <p>A simple bar chart shows how many times you've used shortcuts over the past 7 days.</p>
+  <ul>
+    <li>Each bar represents one day.</li>
+    <li>The chart updates automatically as you use shortcuts.</li>
+    <li>Useful for tracking how actively you're using OmniJump.</li>
+  </ul>
+
+  <h2>Export Shortcuts</h2>
+  <p>Download all your shortcuts as a JSON file for backup or migration.</p>
+  <ol>
+    <li>Click the <strong>"Export as JSON"</strong> button.</li>
+    <li>A file named <code>omnibar-shortcuts.json</code> is downloaded to your computer.</li>
+    <li>Keep this file safe as a backup.</li>
+  </ol>
+
+  <h3>Export File Format</h3>
+  <p>The JSON file contains an array of shortcuts with metadata:</p>
+  <ul>
+    <li><code>key</code> — normalized keyword</li>
+    <li><code>urls</code> — array of URLs (for bundles; single-item array for redirects)</li>
+    <li><code>label</code> — optional label (bundles only)</li>
+    <li><code>createdAt</code> — timestamp when created</li>
+    <li><code>lastUsed</code> — timestamp of last use (or null if never used)</li>
+  </ul>
+
+  <h2>Import Shortcuts</h2>
+  <p>Restore shortcuts from a previously exported JSON file.</p>
+  <ol>
+    <li>Click the <strong>"Import from JSON"</strong> button.</li>
+    <li>Select a previously exported <code>omnibar-shortcuts.json</code> file.</li>
+    <li>OmniJump imports all shortcuts from the file.</li>
+  </ol>
+
+  <h3>What Happens on Import</h3>
+  <ul>
+    <li>Shortcuts are <strong>merged</strong> with your existing ones (not replaced).</li>
+    <li>If a shortcut with the same keyword already exists, it's <strong>skipped</strong> to avoid conflicts.</li>
+    <li>All metadata (creation date, last used, labels) is preserved.</li>
+  </ul>
+
+  <h2>Sync Across Devices</h2>
+  <p>All settings and shortcuts automatically sync to other Chrome devices where you're signed in.</p>
+  <ul>
+    <li>Changes appear on other devices within a few seconds.</li>
+    <li>No manual action required — just sign in to Chrome.</li>
+    <li>See the <a href="privacy.html">Privacy Policy</a> for how your data is stored.</li>
+  </ul>
+
+  <h2>Troubleshooting Settings</h2>
+
+  <h3>Settings not saving?</h3>
+  <p>Make sure you're logged into Chrome and syncing is enabled. Check <code>chrome://settings/sync</code> to verify.</p>
+
+  <h3>Changes on other devices not appearing?</h3>
+  <p>Sync can take a few seconds. Refresh the side panel or wait a moment for changes to appear.</p>
+
+  <h3>Want to reset to defaults?</h3>
+  <p>Currently, OmniJump doesn't have a "reset all settings" button, but you can delete the extension and reinstall it to start fresh.</p>
+</body>
+</html>
