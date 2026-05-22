@@ -55,7 +55,7 @@ function formatSiteName(host: string): string {
   return SITE_NAMES[base] ?? (base.charAt(0).toUpperCase() + base.slice(1));
 }
 
-async function buildSuggestedKey(host: string, store: ShortcutStore): Promise<string> {
+function buildSuggestedKey(host: string, store: ShortcutStore): string {
   const existing = new Set(Object.keys(store.shortcuts));
   const base = suggestKeyFromUrl(`https://${host}/`) ?? host.slice(0, 2);
   return uniqueKey(base, existing);
@@ -169,6 +169,7 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
     sessions[tabId] = null;
     await chrome.storage.session.set({ tabActiveSessions: sessions });
     await chrome.action.setBadgeText({ tabId, text: '' });
+    await chrome.storage.session.remove(`suggestion_${tabId}`);
     return;
   }
 
@@ -177,6 +178,7 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
     sessions[tabId] = null;
     await chrome.storage.session.set({ tabActiveSessions: sessions });
     await chrome.action.setBadgeText({ tabId, text: '' });
+    await chrome.storage.session.remove(`suggestion_${tabId}`);
     return;
   }
 
@@ -191,7 +193,7 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
 
   if (total >= TIP_THRESHOLD) {
     const siteName = formatSiteName(host);
-    const key = await buildSuggestedKey(host, store);
+    const key = buildSuggestedKey(host, store);
     const suggestion: Suggestion = { key, url: hit.baseUrl, siteName, host };
     await chrome.storage.session.set({ [`suggestion_${tabId}`]: suggestion });
     await chrome.action.setBadgeBackgroundColor({ color: '#4c6ef5' });
@@ -225,11 +227,18 @@ chrome.runtime.onInstalled.addListener(async () => {
   });
 });
 
+let syncRulesTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleSyncRules(): void {
+  if (syncRulesTimer !== null) clearTimeout(syncRulesTimer);
+  syncRulesTimer = setTimeout(() => { syncRulesTimer = null; syncRules(); }, 50);
+}
+
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'sync' && Object.keys(changes).some(
     k => k.startsWith(SHORTCUT_PREFIX) || k === SETTINGS_KEY
   )) {
-    syncRules();
+    scheduleSyncRules();
   }
 });
 
@@ -289,16 +298,14 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   if (session) await finalizeTabSession(session);
   delete sessions[tabId];
   await chrome.storage.session.set({ tabActiveSessions: sessions });
+  await chrome.storage.session.remove(`suggestion_${tabId}`);
 });
 
 async function handleShortcutTouch(url: string): Promise<void> {
   const query = extractQuery(url);
   if (!query) return;
-  const store = await getStore();
   const normalized = normalizeKey(query.split(/\s+/)[0]);
-  if (store.shortcuts[normalized]) {
-    await touchShortcut(normalized);
-  }
+  await touchShortcut(normalized);
 }
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {

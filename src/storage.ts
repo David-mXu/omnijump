@@ -155,8 +155,11 @@ export async function touchShortcut(key: string): Promise<void> {
 }
 
 export async function renameShortcut(originalKey: string, updated: Shortcut): Promise<void> {
-  await chrome.storage.sync.set({ [`${SHORTCUT_PREFIX}${updated.key}`]: updated });
-  await chrome.storage.sync.remove(`${SHORTCUT_PREFIX}${originalKey}`);
+  const newKey = normalizeKey(updated.key);
+  const oldKey = normalizeKey(originalKey);
+  const normalized = { ...updated, key: newKey };
+  await chrome.storage.sync.set({ [`${SHORTCUT_PREFIX}${newKey}`]: normalized });
+  await chrome.storage.sync.remove(`${SHORTCUT_PREFIX}${oldKey}`);
 }
 
 export async function cleanupStaleShortcuts(): Promise<void> {
