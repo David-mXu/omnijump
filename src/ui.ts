@@ -13,8 +13,11 @@ export function displayUrl(url: string): string {
   try { return new URL(url).hostname; } catch { return url; }
 }
 
+let editingRow: HTMLLIElement | null = null;
+
 function openEdit(li: HTMLLIElement): void {
-  document.querySelectorAll<HTMLLIElement>('li.editing').forEach(el => el.classList.remove('editing'));
+  if (editingRow && editingRow !== li) editingRow.classList.remove('editing');
+  editingRow = li;
   li.classList.add('editing');
   li.querySelector<HTMLInputElement>('.edit-form input')?.focus();
 }
@@ -60,6 +63,7 @@ async function saveEdit(
     } else {
       await upsertShortcut(updated);
     }
+    editingRow = null;
     await onRender();
   } catch (err) {
     statusEl.textContent = (err as Error).message;
@@ -186,7 +190,10 @@ export function buildShortcutRow(
   cancelBtn.type = 'button';
   cancelBtn.className = 'btn-secondary btn-sm';
   cancelBtn.textContent = 'Cancel';
-  cancelBtn.addEventListener('click', () => li.classList.remove('editing'));
+  cancelBtn.addEventListener('click', () => {
+    li.classList.remove('editing');
+    if (editingRow === li) editingRow = null;
+  });
 
   editActions.append(saveBtn, cancelBtn);
   editForm.append(keyInput, secondInput, editActions, editStatus);

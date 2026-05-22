@@ -122,14 +122,7 @@ function renderList(): void {
 async function refresh(): Promise<void> {
   const store = await getStore();
   shortcutCache = Object.values(store.shortcuts);
-  settingsCache = {
-    maxShortcuts: store.settings.maxShortcuts,
-    filterThreshold: store.settings.filterThreshold,
-    darkMode: store.settings.darkMode ?? false,
-    staleAutoDelete: store.settings.staleAutoDelete,
-    staleDays: store.settings.staleDays,
-    smartSuggestions: store.settings.smartSuggestions ?? false,
-  };
+  settingsCache = { ...store.settings };
   document.body.classList.toggle('dark', settingsCache.darkMode);
   renderList();
 }

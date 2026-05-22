@@ -45,12 +45,11 @@ export function fuzzyFilter(query: string, shortcuts: Shortcut[]): Shortcut[] {
     let hostname = s.url;
     try { hostname = new URL(s.url).hostname; } catch { /* use full url */ }
 
-    const best = Math.max(
-      fuzzyScore(query, s.key),
-      fuzzyScore(query, hostname),
-      fuzzyScore(query, s.url),
-      fuzzyScore(query, s.label ?? ''),
-    );
+    const urlScore = hostname === s.url
+      ? fuzzyScore(query, hostname)
+      : Math.max(fuzzyScore(query, hostname), fuzzyScore(query, s.url));
+    const labelScore = s.label ? fuzzyScore(query, s.label) : -Infinity;
+    const best = Math.max(fuzzyScore(query, s.key), urlScore, labelScore);
 
     if (best > -Infinity) scored.push({ shortcut: s, score: best });
   }

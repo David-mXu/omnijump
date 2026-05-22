@@ -26,14 +26,13 @@ function isBlocklisted(host: string): boolean {
   return SEARCH_ENGINE_BLOCKLIST.has(host);
 }
 
-function detectSearch(url: string): { param: string; baseUrl: string } | null {
+function detectSearch(url: string): { param: string; baseUrl: string; host: string } | null {
   try {
     const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, '');
     for (const param of SEARCH_PARAMS) {
       if (parsed.searchParams.has(param)) {
-        const base = new URL(parsed.href);
-        base.search = '';
-        return { param, baseUrl: `${base.href}?${param}=` };
+        return { param, baseUrl: `${parsed.origin}${parsed.pathname}?${param}=`, host };
       }
     }
     return null;
@@ -120,10 +119,21 @@ async function finalizeTabSession(
   await chrome.storage.session.set({ searchVisitCounts: counts });
 }
 
+async function clearTipState(
+  tabId: number,
+  sessions: Record<number, { host: string; param: string; baseUrl: string } | null>
+): Promise<void> {
+  sessions[tabId] = null;
+  await Promise.all([
+    chrome.storage.session.set({ tabActiveSessions: sessions }),
+    chrome.action.setBadgeText({ tabId, text: '' }),
+    chrome.storage.session.remove(`suggestion_${tabId}`),
+  ]);
+}
+
 async function handleSmartTip(url: string, tabId: number): Promise<void> {
   const hit = detectSearch(url);
-  const parsed = hit ? new URL(url) : null;
-  const host = parsed?.hostname.replace(/^www\./, '') ?? null;
+  const host = hit?.host ?? null;
 
   const sessionKeys = hit
     ? ['tabActiveSessions', 'searchVisitCounts']
@@ -137,28 +147,19 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
   }
 
   if (!hit || !host) {
-    sessions[tabId] = null;
-    await chrome.storage.session.set({ tabActiveSessions: sessions });
-    await chrome.action.setBadgeText({ tabId, text: '' });
-    await chrome.storage.session.remove(`suggestion_${tabId}`);
+    await clearTipState(tabId, sessions);
     return;
   }
 
   if (isBlocklisted(host)) {
-    sessions[tabId] = null;
-    await chrome.storage.session.set({ tabActiveSessions: sessions });
-    await chrome.action.setBadgeText({ tabId, text: '' });
-    await chrome.storage.session.remove(`suggestion_${tabId}`);
+    await clearTipState(tabId, sessions);
     return;
   }
 
   const store = await getStore();
 
   if (!store.settings.smartSuggestions) {
-    sessions[tabId] = null;
-    await chrome.storage.session.set({ tabActiveSessions: sessions });
-    await chrome.action.setBadgeText({ tabId, text: '' });
-    await chrome.storage.session.remove(`suggestion_${tabId}`);
+    await clearTipState(tabId, sessions);
     return;
   }
 
@@ -166,19 +167,13 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
     (s) => s.url.startsWith(hit.baseUrl)
   );
   if (alreadyCovered) {
-    sessions[tabId] = null;
-    await chrome.storage.session.set({ tabActiveSessions: sessions });
-    await chrome.action.setBadgeText({ tabId, text: '' });
-    await chrome.storage.session.remove(`suggestion_${tabId}`);
+    await clearTipState(tabId, sessions);
     return;
   }
 
   const dismissed = await getDismissedHosts();
   if (dismissed.has(host)) {
-    sessions[tabId] = null;
-    await chrome.storage.session.set({ tabActiveSessions: sessions });
-    await chrome.action.setBadgeText({ tabId, text: '' });
-    await chrome.storage.session.remove(`suggestion_${tabId}`);
+    await clearTipState(tabId, sessions);
     return;
   }
 

@@ -137,11 +137,6 @@ export async function touchShortcut(key: string): Promise<void> {
   ]);
 
   const shortcut = syncResult[storageKey] as Shortcut | undefined;
-  if (shortcut) {
-    await chrome.storage.sync.set({
-      [storageKey]: { ...shortcut, lastUsed: now, useCount: (shortcut.useCount ?? 0) + 1 },
-    });
-  }
 
   // Rolling 7-day usage counter
   const today = new Date(now).toISOString().slice(0, 10);
@@ -151,7 +146,15 @@ export async function touchShortcut(key: string): Promise<void> {
   for (const k of Object.keys(counts)) {
     if (k < cutoff) delete counts[k];
   }
-  await chrome.storage.local.set({ [DAILY_KEY]: counts });
+
+  if (shortcut) {
+    await Promise.all([
+      chrome.storage.sync.set({ [storageKey]: { ...shortcut, lastUsed: now, useCount: (shortcut.useCount ?? 0) + 1 } }),
+      chrome.storage.local.set({ [DAILY_KEY]: counts }),
+    ]);
+  } else {
+    await chrome.storage.local.set({ [DAILY_KEY]: counts });
+  }
 }
 
 export async function renameShortcut(originalKey: string, updated: Shortcut): Promise<void> {
@@ -166,13 +169,14 @@ export async function cleanupStaleShortcuts(): Promise<void> {
   const store = await getStore();
   if (!store.settings.staleAutoDelete) return;
 
-  const cutoff = Date.now() - store.settings.staleDays * 86_400_000;
+  const now = Date.now();
+  const cutoff = now - store.settings.staleDays * 86_400_000;
   const toGrace: Record<string, Shortcut> = {};
   const toDelete: string[] = [];
 
   for (const [key, shortcut] of Object.entries(store.shortcuts)) {
     if (shortcut.lastUsed === undefined) {
-      toGrace[`${SHORTCUT_PREFIX}${key}`] = { ...shortcut, lastUsed: Date.now() };
+      toGrace[`${SHORTCUT_PREFIX}${key}`] = { ...shortcut, lastUsed: now };
     } else if (shortcut.lastUsed < cutoff) {
       toDelete.push(`${SHORTCUT_PREFIX}${key}`);
     }

@@ -1,8 +1,8 @@
-import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, deleteShortcut, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
+import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, deleteShortcut, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
 import { buildShortcutRow, normalizeUrl } from './ui';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
 import { fuzzyFilter } from './fuzzy';
-import { Shortcut } from './types';
+import { Shortcut, UserSettings } from './types';
 
 // ── Tab elements ──────────────────────────────────────────────────────────────
 const tabShortcutsBtn = document.getElementById('tabShortcuts') as HTMLButtonElement;
@@ -95,7 +95,7 @@ tabBundleBtn.addEventListener('click', () => showTab('bundle'));
 
 // ── Store cache + render ──────────────────────────────────────────────────────
 let shortcutCache: Shortcut[] = [];
-let settingsCache = { maxShortcuts: 500, filterThreshold: 25, darkMode: false };
+let settingsCache: UserSettings = { maxShortcuts: 500, filterThreshold: 25, darkMode: false, staleAutoDelete: true, staleDays: 90, smartSuggestions: false };
 
 function renderList(): void {
   filterInput.hidden = shortcutCache.length < settingsCache.filterThreshold;
@@ -119,7 +119,7 @@ function renderList(): void {
 async function refresh(): Promise<void> {
   const store = await getStore();
   shortcutCache = Object.values(store.shortcuts);
-  settingsCache = { maxShortcuts: store.settings.maxShortcuts, filterThreshold: store.settings.filterThreshold, darkMode: store.settings.darkMode ?? false };
+  settingsCache = { ...store.settings };
   document.body.classList.toggle('dark', settingsCache.darkMode);
   renderList();
 }
@@ -463,8 +463,7 @@ saveMaxBtn.addEventListener('click', async () => {
     settingsStatusEl.className = 'error';
     return;
   }
-  const store = await getStore();
-  await saveSettings({ ...store.settings, maxShortcuts: value });
+  await saveSettings({ ...settingsCache, maxShortcuts: value });
   settingsStatusEl.textContent = 'Saved.';
   settingsStatusEl.className = 'success';
 });
@@ -476,8 +475,7 @@ saveFilterThresholdBtn.addEventListener('click', async () => {
     filterThresholdStatusEl.className = 'error';
     return;
   }
-  const store = await getStore();
-  await saveSettings({ ...store.settings, filterThreshold: value });
+  await saveSettings({ ...settingsCache, filterThreshold: value });
   filterThresholdStatusEl.textContent = 'Saved.';
   filterThresholdStatusEl.className = 'success';
 });
@@ -489,21 +487,18 @@ saveStaleBtn.addEventListener('click', async () => {
     staleStatusEl.className = 'error';
     return;
   }
-  const store = await getStore();
-  await saveSettings({ ...store.settings, staleAutoDelete: staleToggle.checked, staleDays: days });
+  await saveSettings({ ...settingsCache, staleAutoDelete: staleToggle.checked, staleDays: days });
   staleStatusEl.textContent = 'Saved.';
   staleStatusEl.className = 'success';
 });
 
 darkModeToggle.addEventListener('change', async () => {
-  const store = await getStore();
-  await saveSettings({ ...store.settings, darkMode: darkModeToggle.checked });
+  await saveSettings({ ...settingsCache, darkMode: darkModeToggle.checked });
   document.body.classList.toggle('dark', darkModeToggle.checked);
 });
 
 smartSuggestionsToggle.addEventListener('change', async () => {
-  const store = await getStore();
-  await saveSettings({ ...store.settings, smartSuggestions: smartSuggestionsToggle.checked });
+  await saveSettings({ ...settingsCache, smartSuggestions: smartSuggestionsToggle.checked });
 });
 
 // ── Export / Import ───────────────────────────────────────────────────────────
@@ -534,23 +529,44 @@ importFile.addEventListener('change', async () => {
     importFile.value = '';
     return;
   }
-  if (payload.settings) {
-    try { await saveSettings(payload.settings as Parameters<typeof saveSettings>[0]); } catch { /* ignore */ }
+  if (payload.settings && typeof payload.settings === 'object') {
+    const raw = payload.settings as Record<string, unknown>;
+    const sanitized: Partial<UserSettings> = {};
+    if (typeof raw.maxShortcuts === 'number') sanitized.maxShortcuts = Math.min(500, Math.max(1, raw.maxShortcuts));
+    if (typeof raw.filterThreshold === 'number') sanitized.filterThreshold = Math.min(500, Math.max(1, raw.filterThreshold));
+    if (typeof raw.staleDays === 'number') sanitized.staleDays = Math.min(365, Math.max(7, raw.staleDays));
+    if (typeof raw.staleAutoDelete === 'boolean') sanitized.staleAutoDelete = raw.staleAutoDelete;
+    if (typeof raw.darkMode === 'boolean') sanitized.darkMode = raw.darkMode;
+    if (typeof raw.smartSuggestions === 'boolean') sanitized.smartSuggestions = raw.smartSuggestions;
+    if (Object.keys(sanitized).length > 0) {
+      const store = await getStore();
+      try { await saveSettings({ ...store.settings, ...sanitized }); } catch { /* ignore */ }
+    }
   }
   let imported = 0;
   let failed = 0;
   for (const s of payload.shortcuts) {
+    const shortcut = s as Shortcut;
+    const key = normalizeKey(shortcut.key);
+    if (!key) {
+      failed++;
+      console.error('Failed to import shortcut (empty key after normalization):', s);
+      continue;
+    }
+    const normalized: Shortcut = { ...shortcut, key };
+    if (normalized.type === 'bundle' && normalized.bundleUrls?.length) {
+      normalized.url = normalized.bundleUrls[0];
+    }
     try {
-      const shortcut = s as Shortcut;
-      const key = normalizeKey(shortcut.key);
-      if (!key) throw new Error('Key is empty after normalization.');
-      const normalized: Shortcut = { ...shortcut, key };
-      if (normalized.type === 'bundle' && normalized.bundleUrls?.length) {
-        normalized.url = normalized.bundleUrls[0];
-      }
       await chrome.storage.sync.set({ [`${SHORTCUT_PREFIX}${key}`]: normalized });
       imported++;
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('QUOTA_BYTES') || msg.toLowerCase().includes('quota')) {
+        dataStatusEl.textContent = 'Storage quota exceeded — import stopped. Delete some shortcuts to free up space.';
+        importFile.value = '';
+        return;
+      }
       failed++;
       console.error('Failed to import shortcut:', s, err);
     }
@@ -621,6 +637,9 @@ async function checkTipSuggestion(): Promise<void> {
     dismissSuggestionBtn.onclick = async () => {
       await chrome.storage.session.remove(`suggestion_${tabId}`);
       await chrome.action.setBadgeText({ tabId, text: '' });
+      if (suggestion.host) {
+        await addDismissedHost(suggestion.host);
+      }
       suggestionEl.hidden = true;
     };
   } catch { /* non-fatal */ }
