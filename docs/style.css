@@ -46,11 +46,6 @@ nav {
   border-bottom: 1px solid #e0e0e0;
   padding: 0.75em 20px;
   font-size: 0.95rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1em;
-  align-items: center;
-  justify-content: center;
   z-index: 10;
 }
 
@@ -64,6 +59,7 @@ nav > div {
   flex-wrap: wrap;
   gap: 1em;
   align-items: center;
+  justify-content: center;
 }
 
 nav a {
