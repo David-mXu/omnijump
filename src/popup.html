@@ -89,6 +89,42 @@
       }
       #dismissSuggestion:hover { background: #f5f5f5; }
 
+      /* ── URL ancestors ────────────────────────────────────────────────────── */
+      .url-ancestors {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 4px;
+      }
+      .url-ancestors:empty { display: none; }
+      .url-ancestor-btn {
+        font-size: 11px;
+        padding: 2px 7px;
+        border-radius: 10px;
+        border: 1px solid #d0d0d0;
+        background: transparent;
+        color: #888;
+        cursor: pointer;
+        white-space: nowrap;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .url-ancestor-btn:hover {
+        background: #4c6ef5;
+        color: #fff;
+        border-color: #4c6ef5;
+      }
+      body.dark .url-ancestor-btn {
+        border-color: #3d3d3d;
+        color: #666;
+      }
+      body.dark .url-ancestor-btn:hover {
+        background: #7b9eff;
+        color: #1a1a1b;
+        border-color: #7b9eff;
+      }
+
       /* ── Dark mode ────────────────────────────────────────────────────────── */
       body.dark { background: #1a1a1b; color: #e0e0e0; }
       body.dark h1 { color: #e0e0e0; }
@@ -126,6 +162,7 @@
       <input id="shortcutKey" type="text" autocomplete="off" />
       <label for="shortcutUrl">Destination URL</label>
       <input id="shortcutUrl" type="text" placeholder="google.com or https://..." />
+      <div id="urlAncestors" class="url-ancestors"></div>
       <button type="submit">Save Shortcut</button>
       <div id="status" role="status"></div>
     </form>

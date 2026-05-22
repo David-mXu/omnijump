@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { normalizeKey } from './storage';
-import { suggestKeyFromUrl, uniqueKey } from './suggest';
+import { suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
 
 describe('normalizeKey', () => {
   it('lowercases and trims', () => {
@@ -53,5 +53,33 @@ describe('uniqueKey', () => {
     expect(uniqueKey('gh', new Set(['gh']))).toBe('gh2');
     expect(uniqueKey('gh', new Set(['gh', 'gh2']))).toBe('gh3');
     expect(uniqueKey('gh', new Set(['gh', 'gh2', 'gh3']))).toBe('gh4');
+  });
+});
+
+describe('getUrlAncestors', () => {
+  it('returns root domain for a URL with path and query string', () => {
+    expect(getUrlAncestors('https://amazon.ca/s?k=laptop')).toEqual(['https://amazon.ca/']);
+  });
+  it('returns root domain for a single-segment path', () => {
+    expect(getUrlAncestors('https://example.com/search')).toEqual(['https://example.com/']);
+  });
+  it('returns root and intermediate paths for multi-segment paths', () => {
+    expect(getUrlAncestors('https://example.com/a/b/c')).toEqual([
+      'https://example.com/',
+      'https://example.com/a/',
+      'https://example.com/a/b/',
+    ]);
+  });
+  it('returns empty array for a root URL with no path', () => {
+    expect(getUrlAncestors('https://example.com')).toEqual([]);
+  });
+  it('returns empty array for a root URL with trailing slash only', () => {
+    expect(getUrlAncestors('https://example.com/')).toEqual([]);
+  });
+  it('returns root domain for URL with only query string', () => {
+    expect(getUrlAncestors('https://example.com?q=test')).toEqual(['https://example.com/']);
+  });
+  it('returns empty array for an invalid URL', () => {
+    expect(getUrlAncestors('not a url')).toEqual([]);
   });
 });

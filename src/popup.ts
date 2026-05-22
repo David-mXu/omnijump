@@ -1,5 +1,5 @@
 import { getStore, normalizeKey, upsertShortcut } from './storage';
-import { suggestKeyFromUrl, uniqueKey } from './suggest';
+import { suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
 import { Suggestion } from './types';
 
 function normalizeUrl(input: string): string {
@@ -16,6 +16,25 @@ const statusEl = document.getElementById('status') as HTMLDivElement | null;
 function setStatus(message: string): void {
 	if (statusEl) {
 		statusEl.textContent = message;
+	}
+}
+
+function renderUrlAncestors(url: string): void {
+	const container = document.getElementById('urlAncestors') as HTMLDivElement | null;
+	if (!container) return;
+
+	container.innerHTML = '';
+	for (const ancestor of getUrlAncestors(url)) {
+		const btn = document.createElement('button');
+		btn.type = 'button';
+		btn.className = 'url-ancestor-btn';
+		btn.textContent = ancestor.replace(/^https?:\/\//, '');
+		btn.title = ancestor;
+		btn.addEventListener('click', (e) => {
+			e.preventDefault();
+			if (urlInput) urlInput.value = ancestor;
+		});
+		container.appendChild(btn);
 	}
 }
 
@@ -54,6 +73,7 @@ async function init(): Promise<void> {
 		const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 		if (tab?.url && urlInput) {
 			urlInput.value = tab.url;
+			renderUrlAncestors(tab.url);
 			const suggested = suggestKeyFromUrl(tab.url);
 			if (keyInput && suggested) {
 				keyInput.value = suggested;

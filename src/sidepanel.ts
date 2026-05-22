@@ -1,6 +1,6 @@
 import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, deleteShortcut, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
 import { buildShortcutRow, hoveredRow, normalizeUrl } from './ui';
-import { suggestKeyFromUrl, uniqueKey } from './suggest';
+import { suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
 import { fuzzyFilter } from './fuzzy';
 import { Shortcut, Suggestion } from './types';
 
@@ -175,9 +175,29 @@ searchToggleBtn.addEventListener('click', () => {
   searchToggleBtn.textContent = isSearchType ? '− Remove search shortcut' : '+ Make search shortcut';
 });
 
+function renderRedirectUrlAncestors(url: string): void {
+  const container = document.getElementById('redirectUrlAncestors') as HTMLDivElement | null;
+  if (!container) return;
+
+  container.innerHTML = '';
+  for (const ancestor of getUrlAncestors(url)) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'url-ancestor-btn';
+    btn.textContent = ancestor.replace(/^https?:\/\//, '');
+    btn.title = ancestor;
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      redirectUrlInput.value = ancestor;
+    });
+    container.appendChild(btn);
+  }
+}
+
 function initRedirectForm(tab: chrome.tabs.Tab | undefined): void {
   if (!tab?.url) return;
   redirectUrlInput.value = tab.url;
+  renderRedirectUrlAncestors(tab.url);
   // shortcutCache is populated by refresh() before this runs
   const existingKeys = new Set(shortcutCache.map(s => s.key));
   const suggested = suggestKeyFromUrl(tab.url);

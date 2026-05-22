@@ -43,3 +43,26 @@ export function uniqueKey(base: string, existing: Set<string>): string {
   }
   return `${base}${i}`;
 }
+
+export function getUrlAncestors(url: string): string[] {
+  try {
+    const parsed = new URL(url);
+    const ancestors: string[] = [];
+    const pathParts = parsed.pathname.split('/').filter(Boolean);
+
+    // Always offer root origin (skip if URL is already there)
+    const root = parsed.origin + '/';
+    if (parsed.pathname !== '/' || parsed.search) {
+      ancestors.push(root);
+    }
+
+    // Offer intermediate path levels (skip final segment — that's the current URL)
+    for (let i = 0; i < pathParts.length - 1; i++) {
+      ancestors.push(parsed.origin + '/' + pathParts.slice(0, i + 1).join('/') + '/');
+    }
+
+    return ancestors;
+  } catch {
+    return [];
+  }
+}
