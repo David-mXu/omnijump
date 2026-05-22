@@ -19,20 +19,117 @@
   </nav>
 
   <h1>FAQ</h1>
-  <p>Common questions about settings, syncing, and support.</p>
+  <p>Common questions and troubleshooting for OmniJump.</p>
 
-  <h2>Settings</h2>
-  <h3>Settings not saving?</h3>
-  <p>Make sure you're logged into Chrome and syncing is enabled. Check <code>chrome://settings/sync</code> to verify.</p>
+  <h2>General</h2>
 
-  <h3>Changes on other devices not appearing?</h3>
-  <p>Sync can take a few seconds. Refresh the side panel or wait a moment for changes to appear.</p>
+  <h3 id="shortcut-not-triggering">My keyword isn't doing anything</h3>
+  <p>A few things to check:</p>
+  <ul>
+    <li>Make sure the shortcut was saved — it should appear in the list in the side panel.</li>
+    <li>Type the keyword exactly as shown (keywords are case-insensitive and special characters are stripped).</li>
+    <li>Press <strong>Enter</strong> after typing — the browser only redirects on submission, not just on hover.</li>
+    <li>If the keyword was typed with no result, try reloading the extension at <code>chrome://extensions</code> and try again.</li>
+  </ul>
 
-  <h3>Want to reset to defaults?</h3>
-  <p>Currently, OmniJump doesn't have a "reset all settings" button, but you can delete the extension and reinstall it to start fresh.</p>
+  <h3 id="suggestions-interfere">Address bar suggestions are getting in the way</h3>
+  <p>When you start typing a keyword, the browser's built-in suggestions (history, bookmarks, search completions) can appear and take precedence. If this happens:</p>
+  <ul>
+    <li>Make sure you're pressing <strong>Enter</strong> on the blank address bar input, not selecting a suggestion.</li>
+    <li>For the most consistent experience, consider turning off address bar search suggestions in <code>chrome://settings/syncSetup</code> or your browser's search engine settings.</li>
+    <li>Short, unique keywords (like <code>gh</code> or <code>yt</code>) are less likely to conflict with suggestions than common words.</li>
+  </ul>
+
+  <h3 id="keyword-normalization">Why did my keyword change?</h3>
+  <p>OmniJump normalizes all keywords automatically:</p>
+  <ul>
+    <li>Uppercase letters are lowercased: <code>GitHub</code> → <code>github</code></li>
+    <li>Spaces become hyphens: <code>my docs</code> → <code>my-docs</code></li>
+    <li>Special characters are removed: <code>docs!</code> → <code>docs</code></li>
+  </ul>
+  <p>The normalized form is what gets saved and matched in the address bar.</p>
+
+  <h3 id="duplicate-keyword">Can I use the same keyword for two shortcuts?</h3>
+  <p>No — keywords must be unique. Saving a shortcut with an existing keyword overwrites the previous one. Choose distinct keywords for each shortcut.</p>
+
+  <h2 id="search-shortcuts">Search Shortcuts</h2>
+
+  <h3>How do I create a search shortcut?</h3>
+  <p>Search shortcuts are a separate type from plain redirect shortcuts — you can't create one just by putting <code>%s</code> in the URL field. Here's the correct flow:</p>
+  <ol>
+    <li>Open the side panel → <strong>Shortcuts</strong> tab.</li>
+    <li>Enter a keyword (e.g., <code>yt</code>).</li>
+    <li>Optionally enter a fallback URL (e.g., <code>youtube.com</code>) — used when you type the keyword with no query.</li>
+    <li>Click <strong>"+ Make search shortcut"</strong> to reveal the template field.</li>
+    <li>Enter the search URL template with <code>%s</code> as the query placeholder (e.g., <code>https://www.youtube.com/results?search_query=%s</code>).</li>
+    <li>Click <strong>+ Add</strong>.</li>
+  </ol>
+  <p>See <a href="search-shortcuts.html">Search Shortcuts</a> for more detail and ready-to-use templates.</p>
+
+  <h3>My search shortcut redirects to the wrong place</h3>
+  <p>Check the following:</p>
+  <ul>
+    <li>The template URL must include <code>%s</code> exactly once — that's where the query goes.</li>
+    <li>Make sure you saved it as a <strong>search shortcut</strong> (it should show a <strong>search</strong> badge in the list). If it shows no badge, it was saved as a plain redirect — delete it and recreate it using the "+ Make search shortcut" toggle.</li>
+    <li>Type the keyword and query with a <strong>space</strong> between them: <code>yt lofi</code>, not <code>ytlofi</code>.</li>
+  </ul>
+
+  <h3>The search shortcut isn't triggering at all</h3>
+  <ul>
+    <li>Confirm the shortcut has a <strong>search</strong> badge in the side panel list.</li>
+    <li>Make sure you included <code>%s</code> in the template URL.</li>
+    <li>Try reloading the extension at <code>chrome://extensions</code> — sometimes rule changes need a reload to take effect.</li>
+  </ul>
+
+  <h3>Can I change the search URL template later?</h3>
+  <p>Yes. Click the <strong>pencil icon</strong> next to the shortcut in the list, update the template, and save. Changes take effect immediately.</p>
+
+  <h2>Tab Bundles</h2>
+
+  <h3>Some tabs from my bundle didn't open</h3>
+  <p>Tab bundles open all URLs in one go. If some didn't open:</p>
+  <ul>
+    <li>Check that all URLs in the bundle are valid HTTP(S) URLs.</li>
+    <li>Some browsers may block popups or background tabs — make sure OmniJump has permission to open tabs.</li>
+    <li>The first URL always opens in the foreground; the rest open as background tabs and may take a moment to load.</li>
+  </ul>
+
+  <h3>The bundle opens twice</h3>
+  <p>OmniJump has built-in deduplication to prevent double-opens within 1.5 seconds. If you're seeing duplicate opens, try waiting a moment between triggers. This can happen if the same navigation fires more than once in rapid succession.</p>
+
+  <h2>Settings &amp; Sync</h2>
+
+  <h3>Settings aren't saving</h3>
+  <p>Settings are stored in Chrome Sync. Make sure you're signed into Chrome and sync is enabled. Check <code>chrome://settings/syncSetup</code> to verify sync is on.</p>
+
+  <h3>Changes aren't appearing on my other devices</h3>
+  <p>Chrome Sync can take a few seconds to propagate. Refresh the side panel (close and reopen it) or wait a moment. If changes still don't appear, check that both devices are signed into the same Google account with sync enabled.</p>
+
+  <h3>How do I reset everything to defaults?</h3>
+  <p>OmniJump doesn't have a one-click reset. To start fresh:</p>
+  <ol>
+    <li>Export your shortcuts first (Settings tab → Export Shortcuts) if you want a backup.</li>
+    <li>Remove the extension from Chrome.</li>
+    <li>Reinstall it from the Chrome Web Store.</li>
+  </ol>
+
+  <h2>Data &amp; Backups</h2>
+
+  <h3>How do I back up my shortcuts?</h3>
+  <p>Open the Settings tab and click <strong>Export Shortcuts</strong>. A file called <code>omnijump.json</code> will be downloaded. Store it somewhere safe — you can import it later to restore your shortcuts.</p>
+
+  <h3>What happens when I import a file?</h3>
+  <p>All shortcuts in the file are written into your current list. If a shortcut in the file has the same keyword as one you already have, the imported one <strong>overwrites</strong> it. Shortcuts you have that aren't in the file are left untouched.</p>
+
+  <h3>I accidentally deleted a shortcut — can I recover it?</h3>
+  <p>If you have an exported backup, import it to restore your shortcuts. OmniJump doesn't keep a deletion history, so without a backup the shortcut is gone.</p>
+
+  <h3>What's the maximum number of shortcuts?</h3>
+  <p>Up to 500 by default. You can lower this limit in Settings. Chrome's sync storage has a hard cap of 512 items, so OmniJump's limit keeps you safely within that.</p>
 
   <h2>Contact</h2>
-  <h3>Questions or concerns?</h3>
+
+  <h3>Questions, bugs, or feedback?</h3>
   <p>Email <a href="mailto:davidmingxu@gmail.com">davidmingxu@gmail.com</a>.</p>
 </body>
 </html>

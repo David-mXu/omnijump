@@ -19,114 +19,60 @@
   </nav>
 
   <h1>Redirect Shortcuts</h1>
-  <p>A redirect shortcut is the simplest way to save a keyword that points to a single URL. Type the keyword in the address bar to jump there instantly.</p>
+  <p>A redirect shortcut saves a keyword that points to a single URL. Type the keyword in the address bar to jump there instantly.</p>
 
   <h2>Creating a Redirect Shortcut</h2>
-  <p>Open the OmniJump side panel and use the <strong>"Add Redirect"</strong> form:</p>
+  <p>Open the OmniJump side panel → <strong>Shortcuts</strong> tab:</p>
   <ol>
     <li>Enter a short <strong>keyword</strong> (e.g., <code>docs</code>, <code>mail</code>, <code>spotify</code>).</li>
-    <li>Paste or type the full <strong>destination URL</strong>.</li>
-    <li>Press <strong>Enter</strong> or click <strong>Save</strong>.</li>
+    <li>Paste or type the <strong>destination URL</strong>.</li>
+    <li>Click <strong>+ Add</strong> or press <strong>Enter</strong> in the URL field.</li>
   </ol>
+  <p>The shortcut is saved instantly and synced to your other Chrome devices.</p>
 
   <h2>Using Redirect Shortcuts</h2>
-  <p>Once saved, click the address bar and type your keyword:</p>
+  <p>Click the address bar, type the keyword, and press <strong>Enter</strong>:</p>
   <ul>
-    <li>Type: <code>gh</code> → redirects to your saved GitHub URL</li>
-    <li>Type: <code>docs</code> → redirects to your project docs</li>
-    <li>Type: <code>mail</code> → redirects to your email inbox</li>
+    <li><code>gh</code> → jumps to your saved GitHub URL</li>
+    <li><code>docs</code> → jumps to your project docs</li>
+    <li><code>mail</code> → jumps to your email inbox</li>
   </ul>
-  <p><em>Tip:</em> If browser search suggestions are crowding the address bar while you type keywords, turning search suggestions off can make shortcut triggering feel more consistent.</p>
 
   <h2>Quick-Save from Any Page</h2>
-  <p>OmniJump's popup lets you save the current page as a shortcut instantly:</p>
-  <ol>
-    <li>Click the extension icon while visiting a page.</li>
-    <li>A popup opens with the page's URL pre-filled.</li>
-    <li>Enter a keyword and press <strong>Enter</strong>.</li>
-  </ol>
-  <p>The popup also suggests a keyword based on the page's domain name.</p>
+  <p>Click the OmniJump extension icon while on any page to open the popup. The current URL is pre-filled and a keyword is suggested from the domain name. Edit if needed and press <strong>Enter</strong> to save.</p>
 
-  <h2>Search Shortcuts (Using <code>%s</code>)</h2>
-  <p>Add <code>%s</code> to your URL to create a <strong>search shortcut</strong>. When you type the keyword followed by text, it searches the site for that text.</p>
-  <p>For a full setup guide and examples, see <a href="search-shortcuts.html">Search Shortcuts</a>.</p>
-
-  <h3>Example: GitHub Search</h3>
-  <p>Create a shortcut with:</p>
+  <h2>Right-Click to Save</h2>
+  <p>Save a page or link without opening the side panel:</p>
   <ul>
-    <li><strong>Keyword:</strong> <code>gh</code></li>
-    <li><strong>URL:</strong> <code>https://github.com/search?q=%s</code></li>
+    <li><strong>Right-click a page:</strong> Select "Save Page as Shortcut".</li>
+    <li><strong>Right-click a link:</strong> Select "Save Link as Shortcut".</li>
   </ul>
-  <p>Now type <code>gh my-project</code> in the address bar to search GitHub for "my-project".</p>
-
-  <h3>Other Search Examples</h3>
-  <table>
-    <tr>
-      <th>Site</th>
-      <th>Keyword</th>
-      <th>URL</th>
-    </tr>
-    <tr>
-      <td>MDN Docs</td>
-      <td><code>mdn</code></td>
-      <td><code>https://developer.mozilla.org/en-US/search?q=%s</code></td>
-    </tr>
-    <tr>
-      <td>Google</td>
-      <td><code>g</code></td>
-      <td><code>https://www.google.com/search?q=%s</code></td>
-    </tr>
-    <tr>
-      <td>YouTube</td>
-      <td><code>yt</code></td>
-      <td><code>https://www.youtube.com/results?search_query=%s</code></td>
-    </tr>
-    <tr>
-      <td>npm</td>
-      <td><code>npm</code></td>
-      <td><code>https://www.npmjs.com/search?q=%s</code></td>
-    </tr>
-    <tr>
-      <td>Dictionary.com</td>
-      <td><code>def</code></td>
-      <td><code>https://www.dictionary.com/browse/%s</code></td>
-    </tr>
-  </table>
-
-  <h2>Right-Click Shortcuts</h2>
-  <p>Save any page or link without opening the side panel:</p>
-  <ul>
-    <li><strong>Right-click a page:</strong> Select "Save Page as Shortcut" to save the current URL.</li>
-    <li><strong>Right-click a link:</strong> Select "Save Link as Shortcut" to save the link's URL.</li>
-  </ul>
-  <p>A form will pop up where you can confirm or change the keyword before saving.</p>
+  <p>OmniJump auto-generates a keyword from the URL and saves it immediately — the shortcut appears in your list right away.</p>
 
   <h2>Editing and Deleting</h2>
   <p>In the side panel's shortcut list:</p>
   <ul>
-    <li><strong>Click a shortcut row:</strong> Edit the keyword and URL inline.</li>
-    <li><strong>Press Escape:</strong> Cancel the edit.</li>
-    <li><strong>Click the trash icon:</strong> Delete the shortcut.</li>
+    <li>Click the <strong>pencil icon</strong> to edit the keyword or URL inline.</li>
+    <li>Click <strong>Cancel</strong> to discard changes.</li>
+    <li>Click the <strong>× icon</strong> to delete the shortcut.</li>
   </ul>
 
   <h2>Keyword Normalization</h2>
-  <p>OmniJump automatically normalizes your keywords for consistency:</p>
+  <p>OmniJump automatically normalizes keywords for consistency:</p>
   <ul>
-    <li>Converted to <strong>lowercase</strong>: <code>GitHub</code> becomes <code>github</code></li>
-    <li>Spaces become <strong>hyphens</strong>: <code>my docs</code> becomes <code>my-docs</code></li>
-    <li>Special characters are <strong>removed</strong>: <code>docs!@#</code> becomes <code>docs</code></li>
+    <li>Converted to <strong>lowercase</strong>: <code>GitHub</code> → <code>github</code></li>
+    <li>Spaces become <strong>hyphens</strong>: <code>my docs</code> → <code>my-docs</code></li>
+    <li>Special characters are <strong>removed</strong>: <code>docs!@#</code> → <code>docs</code></li>
     <li>Leading/trailing whitespace is <strong>trimmed</strong></li>
   </ul>
 
   <h2>URL Auto-Completion</h2>
-  <p>If you enter a URL without a protocol (like <code>github.com</code>), OmniJump automatically prepends <code>https://</code>.</p>
+  <p>Enter a URL without a protocol (e.g., <code>github.com</code>) and OmniJump automatically prepends <code>https://</code>.</p>
 
   <h2>Usage Stats</h2>
-  <p>Next to each shortcut in the list, you'll see:</p>
-  <ul>
-    <li><strong>Created:</strong> When the shortcut was first saved</li>
-    <li><strong>Last used:</strong> The last time you activated this shortcut from the address bar</li>
-  </ul>
-  <p>These stats help you identify shortcuts you no longer use, which can be deleted to keep your list clean.</p>
+  <p>Each shortcut in the list shows how many times it's been used and when it was last activated. These stats help you identify shortcuts you no longer need.</p>
+
+  <h2>Want to Search a Site?</h2>
+  <p>For shortcuts that search a site (e.g., type <code>gh my-project</code> to search GitHub), use a <strong>Search Shortcut</strong> instead. See <a href="search-shortcuts.html">Search Shortcuts</a>.</p>
 </body>
 </html>

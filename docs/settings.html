@@ -19,113 +19,89 @@
   </nav>
 
   <h1>Settings</h1>
-  <p>Open the Settings tab in the OmniJump side panel to configure how the extension behaves.</p>
+  <p>Open the <strong>Settings</strong> tab in the OmniJump side panel to configure how the extension behaves.</p>
 
   <h2>Dark Mode</h2>
-  <p>Toggle dark mode for the OmniJump interface. This affects the popup, side panel, and options page.</p>
-  <ul>
-    <li><strong>Off:</strong> Light theme (default)</li>
-    <li><strong>On:</strong> Dark theme</li>
-  </ul>
+  <p>Toggle dark mode for the OmniJump interface. Applies to the popup, side panel, and options page.</p>
 
   <h2>Smart Suggestions</h2>
-  <p>When enabled, OmniJump watches your search activity. After visiting a search engine or site 5 times, it suggests creating a shortcut for it.</p>
+  <p>When enabled, OmniJump tracks which sites you search most. After 5 visits to the same site, a banner appears in the side panel suggesting you create a shortcut for it.</p>
   <ul>
-    <li>A dismissable banner appears: "You often search {Site}. Save '{keyword}' as a shortcut?"</li>
-    <li>The suggestion pre-fills the shortcut form for you.</li>
-    <li>Toggle on/off anytime — dismissed suggestions are forgotten after the session.</li>
+    <li>The banner pre-fills the keyword and URL for you — click <strong>Save</strong> to accept.</li>
+    <li>Click <strong>Dismiss</strong> to hide the suggestion for that site permanently.</li>
+    <li>Toggle off anytime to stop collecting suggestions.</li>
   </ul>
 
   <h2>Keyboard Shortcut</h2>
-  <p>Configure a keyboard shortcut to instantly open the OmniJump side panel.</p>
+  <p>Assign a keyboard shortcut to open and close the OmniJump side panel without clicking the toolbar icon.</p>
   <ul>
-    <li>The current shortcut is displayed (e.g., <kbd>Ctrl+Shift+J</kbd>).</li>
-    <li>Click <strong>"Customize"</strong> to change it.</li>
-    <li>You'll be taken to <code>chrome://extensions/shortcuts</code> where you can assign any key combination.</li>
+    <li>The current shortcut is shown (e.g., <kbd>Ctrl+Shift+J</kbd>). If none is set, it will say "not set".</li>
+    <li>Click <strong>Customize</strong> to go to <code>chrome://extensions/shortcuts</code> where you can assign any key combination.</li>
   </ul>
 
   <h2>Max Shortcuts</h2>
-  <p>Set the maximum number of shortcuts you can create. Choose between 1 and 500.</p>
-  <ul>
-    <li><strong>Default:</strong> 500</li>
-    <li>Once you reach the limit, you'll need to delete shortcuts before creating new ones.</li>
-    <li>Useful for keeping your shortcuts list lean and organized.</li>
-  </ul>
+  <p>Set the maximum number of shortcuts you can create (1–500). Default is 500. Once the limit is reached you must delete shortcuts before adding new ones. Lowering this number is useful for keeping your list manageable.</p>
 
   <h2>Filter Bar Threshold</h2>
-  <p>The filter bar (search by keyword or URL) appears once your shortcut count exceeds this threshold.</p>
-  <ul>
-    <li><strong>Default:</strong> 25 shortcuts</li>
-    <li>If you have 24 shortcuts, the filter bar is hidden. Once you add the 25th, it appears.</li>
-    <li>Lower this number to show the filter bar earlier; raise it to keep the interface simpler with fewer shortcuts.</li>
-  </ul>
+  <p>The filter bar (search by keyword or URL) appears once your shortcut count reaches this number. Default is 25. Lower it to show the filter bar sooner; raise it to keep the panel simpler when you have fewer shortcuts.</p>
 
   <h2>Auto-Delete Stale Shortcuts</h2>
-  <p>Automatically remove shortcuts you haven't used in a long time.</p>
+  <p>Automatically delete shortcuts that haven't been used within a set number of days.</p>
 
   <h3>Enable/Disable</h3>
-  <p>Toggle auto-delete on or off.</p>
+  <p>Toggle auto-delete on or off. Off by default.</p>
 
   <h3>Days Until Deletion</h3>
-  <p>Choose how many days a shortcut can go unused before it's automatically deleted. Options range from 7 to 365 days.</p>
+  <p>Choose how long a shortcut can go unused before deletion. Range: 7–365 days.</p>
   <ul>
-    <li><strong>7 days:</strong> Aggressive — good if you create many test shortcuts.</li>
-    <li><strong>30 days:</strong> Moderate — default for most users.</li>
-    <li><strong>90 days:</strong> Conservative — keep shortcuts longer.</li>
-    <li><strong>365 days:</strong> Very conservative — only delete after a year of no use.</li>
+    <li><strong>7 days:</strong> Aggressive — useful for quickly pruning test shortcuts.</li>
+    <li><strong>90 days:</strong> Default — a reasonable balance for most users.</li>
+    <li><strong>365 days:</strong> Conservative — only removes shortcuts unused for a full year.</li>
   </ul>
 
   <h3>Grace Period for New Shortcuts</h3>
-  <p>Brand new shortcuts (no usage yet) get a grace period. They won't be deleted immediately even if auto-delete is on. Instead, their first "use" timestamp is set when created, giving them a full grace period to be used before they're eligible for deletion.</p>
+  <p>New shortcuts that have never been used are not immediately eligible for deletion. OmniJump sets their "last used" timestamp to their creation time, giving them a full grace period before they can be auto-deleted.</p>
 
   <h2>Usage Chart</h2>
-  <p>A simple bar chart shows how many times you've used shortcuts over the past 7 days.</p>
-  <ul>
-    <li>Each bar represents one day.</li>
-    <li>The chart updates automatically as you use shortcuts.</li>
-    <li>Useful for tracking how actively you're using OmniJump.</li>
-  </ul>
+  <p>A bar chart shows how many shortcuts you opened over the past 7 days — one bar per day. Useful for seeing how actively you're using OmniJump.</p>
 
   <h2>Export Shortcuts</h2>
-  <p>Download all your shortcuts as a JSON file for backup or migration.</p>
+  <p>Download all your shortcuts as a JSON backup file.</p>
   <ol>
-    <li>Click the <strong>"Export as JSON"</strong> button.</li>
-    <li>A file named <code>omnibar-shortcuts.json</code> is downloaded to your computer.</li>
-    <li>Keep this file safe as a backup.</li>
+    <li>Click <strong>Export Shortcuts</strong>.</li>
+    <li>A file named <code>omnijump.json</code> is saved to your computer.</li>
   </ol>
 
   <h3>Export File Format</h3>
-  <p>The JSON file contains an array of shortcuts with metadata:</p>
+  <p>The file is a JSON object with a <code>shortcuts</code> array and a <code>settings</code> object. Each shortcut entry contains:</p>
   <ul>
     <li><code>key</code> — normalized keyword</li>
-    <li><code>urls</code> — array of URLs (for bundles; single-item array for redirects)</li>
-    <li><code>label</code> — optional label (bundles only)</li>
-    <li><code>createdAt</code> — timestamp when created</li>
-    <li><code>lastUsed</code> — timestamp of last use (or null if never used)</li>
+    <li><code>type</code> — <code>"redirect"</code>, <code>"parameterized"</code> (search shortcut), or <code>"bundle"</code></li>
+    <li><code>url</code> — destination URL (redirect and search shortcuts)</li>
+    <li><code>urlTemplate</code> — search URL with <code>%s</code> placeholder (search shortcuts only)</li>
+    <li><code>bundleUrls</code> — ordered array of URLs (bundles only)</li>
+    <li><code>label</code> — optional display label</li>
+    <li><code>createdAt</code> — Unix timestamp (ms) when the shortcut was created</li>
+    <li><code>lastUsed</code> — Unix timestamp (ms) of the last activation, or absent if never used</li>
   </ul>
 
   <h2>Import Shortcuts</h2>
-  <p>Restore shortcuts from a previously exported JSON file.</p>
+  <p>Restore shortcuts from an exported <code>omnijump.json</code> file.</p>
   <ol>
-    <li>Click the <strong>"Import from JSON"</strong> button.</li>
-    <li>Select a previously exported <code>omnibar-shortcuts.json</code> file.</li>
+    <li>Click <strong>Import Shortcuts</strong>.</li>
+    <li>Select a previously exported JSON file.</li>
     <li>OmniJump imports all shortcuts from the file.</li>
   </ol>
 
   <h3>What Happens on Import</h3>
   <ul>
-    <li>Shortcuts are <strong>merged</strong> with your existing ones (not replaced).</li>
-    <li>If a shortcut with the same keyword already exists, it's <strong>skipped</strong> to avoid conflicts.</li>
-    <li>All metadata (creation date, last used, labels) is preserved.</li>
+    <li>Shortcuts in the file are written into your list. Any shortcut with the same keyword as one you already have will <strong>overwrite</strong> the existing one.</li>
+    <li>Shortcuts you have that aren't in the file are left untouched.</li>
+    <li>All metadata (creation date, last used, labels) is preserved from the file.</li>
+    <li>Settings in the file are applied before shortcuts, so any <code>maxShortcuts</code> value in the file takes effect during the import.</li>
   </ul>
 
   <h2>Sync Across Devices</h2>
-  <p>All settings and shortcuts automatically sync to other Chrome devices where you're signed in.</p>
-  <ul>
-    <li>Changes appear on other devices within a few seconds.</li>
-    <li>No manual action required — just sign in to Chrome.</li>
-    <li>See the <a href="privacy.html">Privacy Policy</a> for how your data is stored.</li>
-  </ul>
-
+  <p>All shortcuts and settings sync automatically to other Chrome devices where you're signed in. Changes propagate within a few seconds with no manual action needed. See the <a href="privacy.html">Privacy Policy</a> for how your data is stored.</p>
 </body>
 </html>

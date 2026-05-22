@@ -19,44 +19,49 @@
   </nav>
 
   <h1>Search Shortcuts</h1>
-  <p>Search shortcuts let you type a keyword plus a query in the address bar and redirect directly to a site search URL.</p>
+  <p>A search shortcut pairs a keyword with a URL template. Type the keyword followed by a query in the address bar and OmniJump redirects directly to that site's search results.</p>
 
-  <h2>How Search Shortcuts Work</h2>
-  <p>Use <code>%s</code> in your shortcut URL as a query placeholder.</p>
+  <h2>How It Works</h2>
+  <p>Use <code>%s</code> in the URL template as a placeholder for your query.</p>
   <ul>
     <li><strong>Keyword:</strong> <code>gh</code></li>
-    <li><strong>URL:</strong> <code>https://github.com/search?q=%s</code></li>
-    <li><strong>Type in address bar:</strong> <code>gh omnijump</code></li>
-    <li><strong>Result:</strong> Opens GitHub search results for "omnijump"</li>
+    <li><strong>Search URL template:</strong> <code>https://github.com/search?q=%s</code></li>
+    <li><strong>Fallback URL:</strong> <code>https://github.com</code> (used when no query is typed)</li>
+  </ul>
+  <p>In the address bar:</p>
+  <ul>
+    <li>Type <code>gh</code> → goes to <code>https://github.com</code></li>
+    <li>Type <code>gh omnijump</code> → goes to <code>https://github.com/search?q=omnijump</code></li>
   </ul>
 
-  <h2>Create a Search Shortcut</h2>
+  <h2>Creating a Search Shortcut</h2>
   <ol>
-    <li>Open the OmniJump side panel.</li>
-    <li>In <strong>Add Redirect</strong>, enter a short keyword.</li>
-    <li>Paste a site search URL that includes <code>%s</code>.</li>
-    <li>Press <strong>Enter</strong> or click <strong>Save</strong>.</li>
+    <li>Open the OmniJump side panel → <strong>Shortcuts</strong> tab.</li>
+    <li>Enter a short <strong>keyword</strong> (e.g., <code>yt</code>).</li>
+    <li>Enter a <strong>fallback URL</strong> — the page to open when you type the keyword alone with no query (e.g., <code>youtube.com</code>). Optional; if left blank OmniJump derives it from the template.</li>
+    <li>Click <strong>"+ Make search shortcut"</strong> — this reveals the search URL template field.</li>
+    <li>Enter the <strong>search URL template</strong> with <code>%s</code> where the query goes (e.g., <code>https://www.youtube.com/results?search_query=%s</code>).</li>
+    <li>Click <strong>+ Add</strong>.</li>
   </ol>
+  <p>The shortcut appears in your list with a <strong>search</strong> badge.</p>
 
-  <h2>Use a Search Shortcut</h2>
+  <h2>Using a Search Shortcut</h2>
   <ol>
     <li>Click the address bar.</li>
-    <li>Type your keyword, then a space, then your query.</li>
+    <li>Type your keyword, a space, then your query.</li>
     <li>Press <strong>Enter</strong>.</li>
   </ol>
-  <p>Example: <code>yt lo fi mixes</code> opens YouTube results for "lo fi mixes".</p>
+  <p>Example: typing <code>yt lo fi mixes</code> opens <code>https://www.youtube.com/results?search_query=lo+fi+mixes</code>.</p>
 
-  <h2>Ready-to-Use Search Templates</h2>
+  <h2>Editing a Search Shortcut</h2>
+  <p>Click the <strong>pencil icon</strong> next to any search shortcut in the list. Update the keyword or search URL template and save. Changes take effect immediately.</p>
+
+  <h2>Ready-to-Use Templates</h2>
   <table>
     <tr>
       <th>Site</th>
-      <th>Keyword</th>
-      <th>URL Template</th>
-    </tr>
-    <tr>
-      <td>Google</td>
-      <td><code>g</code></td>
-      <td><code>https://www.google.com/search?q=%s</code></td>
+      <th>Suggested Keyword</th>
+      <th>Search URL Template</th>
     </tr>
     <tr>
       <td>GitHub</td>
@@ -69,7 +74,7 @@
       <td><code>https://www.youtube.com/results?search_query=%s</code></td>
     </tr>
     <tr>
-      <td>MDN</td>
+      <td>MDN Web Docs</td>
       <td><code>mdn</code></td>
       <td><code>https://developer.mozilla.org/en-US/search?q=%s</code></td>
     </tr>
@@ -78,28 +83,23 @@
       <td><code>npm</code></td>
       <td><code>https://www.npmjs.com/search?q=%s</code></td>
     </tr>
+    <tr>
+      <td>Google</td>
+      <td><code>g</code></td>
+      <td><code>https://www.google.com/search?q=%s</code></td>
+    </tr>
+    <tr>
+      <td>Reddit</td>
+      <td><code>r</code></td>
+      <td><code>https://www.reddit.com/search/?q=%s</code></td>
+    </tr>
+    <tr>
+      <td>Dictionary.com</td>
+      <td><code>def</code></td>
+      <td><code>https://www.dictionary.com/browse/%s</code></td>
+    </tr>
   </table>
 
-  <h2>Behavior Notes</h2>
-  <ul>
-    <li>Search shortcuts run from the address bar by matching your typed keyword in the search URL.</li>
-    <li>The keyword by itself still works. Example: typing only <code>gh</code> opens the base URL from the shortcut.</li>
-    <li>Use clear, short keywords to avoid conflicts with your normal browsing habits.</li>
-  </ul>
-
-  <h2>Troubleshooting</h2>
-
-  <h3>The shortcut is not triggering</h3>
-  <ul>
-    <li>Make sure the saved URL includes <code>%s</code> exactly once.</li>
-    <li>Type <code>keyword query</code> with a space between them.</li>
-    <li>Check that no other shortcut uses the same keyword.</li>
-  </ul>
-
-  <h3>Address bar suggestions interfere while typing</h3>
-  <p>If browser search suggestions are crowding the address bar as you type, turning search suggestions off in browser settings can make shortcut triggering feel more predictable.</p>
-
-  <h3>Need to change a template later</h3>
-  <p>Edit the shortcut from the shortcuts list in the side panel and save again. Changes apply immediately.</p>
+  <p>Having trouble? See the <a href="faq.html#search-shortcuts">Search Shortcuts FAQ</a>.</p>
 </body>
 </html>
