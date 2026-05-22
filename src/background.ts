@@ -295,7 +295,7 @@ async function handleShortcutTouch(url: string): Promise<void> {
   const query = extractQuery(url);
   if (!query) return;
   const store = await getStore();
-  const normalized = normalizeKey(query);
+  const normalized = normalizeKey(query.split(/\s+/)[0]);
   if (store.shortcuts[normalized]) {
     await touchShortcut(normalized);
   }

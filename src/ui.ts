@@ -26,6 +26,7 @@ async function saveEdit(
   urlOrLabel: string,
   statusEl: HTMLDivElement,
   onRender: () => Promise<void>,
+  urlTemplate?: string,
 ): Promise<void> {
   const newKey = normalizeKey(rawKey);
   statusEl.textContent = '';
@@ -41,6 +42,14 @@ async function saveEdit(
       const url = normalizeUrl(urlOrLabel);
       if (!url) { statusEl.textContent = 'Enter a URL.'; return; }
       updated = { ...original, key: newKey, url };
+    } else if (original.type === 'parameterized') {
+      const template = urlTemplate?.trim() || '';
+      if (!template.includes('%s')) {
+        statusEl.textContent = 'Search URL must include %s.';
+        return;
+      }
+      const fallbackUrl = normalizeUrl(urlOrLabel) || template.replace('%s', '');
+      updated = { ...original, key: newKey, url: fallbackUrl, urlTemplate: template };
     } else {
       updated = { ...original, key: newKey, label: urlOrLabel.trim() || undefined };
     }
@@ -148,6 +157,13 @@ export function buildShortcutRow(
     secondInput.placeholder = 'Label (optional)';
   }
 
+  let urlTemplateInput: HTMLInputElement | null = null;
+  if (shortcut.type === 'parameterized') {
+    secondInput.value = shortcut.urlTemplate ?? '';
+    secondInput.placeholder = 'https://site.com/search?q=%s';
+    urlTemplateInput = secondInput;
+  }
+
   const editActions = document.createElement('div');
   editActions.className = 'edit-actions';
 
@@ -158,9 +174,13 @@ export function buildShortcutRow(
   saveBtn.type = 'button';
   saveBtn.className = 'btn-primary btn-sm';
   saveBtn.textContent = 'Save';
-  saveBtn.addEventListener('click', () =>
-    saveEdit(li, shortcut, keyInput.value, secondInput.value, editStatus, onRender)
-  );
+  saveBtn.addEventListener('click', () => {
+    if (shortcut.type === 'parameterized') {
+      saveEdit(li, shortcut, keyInput.value, '', editStatus, onRender, secondInput.value);
+    } else {
+      saveEdit(li, shortcut, keyInput.value, secondInput.value, editStatus, onRender);
+    }
+  });
 
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';

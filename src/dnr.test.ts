@@ -80,4 +80,51 @@ describe('rebuildDynamicRules', () => {
       expect(getRegex().test('https://google.com/search?q=youtube')).toBe(false);
     });
   });
+
+  describe('parameterized shortcut', () => {
+    beforeEach(async () => {
+      syncStore[`${SHORTCUT_PREFIX}yt`] = {
+        key: 'yt',
+        url: 'https://youtube.com',
+        type: 'parameterized',
+        urlTemplate: 'https://youtube.com/results?search_query=%s',
+      };
+      await rebuildDynamicRules();
+    });
+
+    it('creates two rules (priority 1 exact-match + priority 2 capture-group)', () => {
+      expect(dnrRules).toHaveLength(2);
+      expect(dnrRules[0].priority).toBe(1);
+      expect(dnrRules[1].priority).toBe(2);
+    });
+
+    it('rule 1 (exact-match) redirects to fallback URL', () => {
+      const rule1 = dnrRules.find(r => r.priority === 1);
+      expect(rule1?.action.redirect?.url).toBe('https://youtube.com');
+    });
+
+    it('rule 2 (capture-group) uses regexSubstitution with \\1 placeholder', () => {
+      const rule2 = dnrRules.find(r => r.priority === 2);
+      expect(rule2?.action.redirect?.regexSubstitution).toBe('https://youtube.com/results?search_query=\\1');
+    });
+
+    it('rule 2 regex matches full Google URL with keyword + space + query', () => {
+      const rule2 = dnrRules.find(r => r.priority === 2);
+      const regex = new RegExp(rule2?.condition.regexFilter ?? '');
+      expect(regex.test('https://google.com/search?q=yt+lofi')).toBe(true);
+    });
+
+    it('rule 2 regex does not match bare keyword (no query)', () => {
+      const rule2 = dnrRules.find(r => r.priority === 2);
+      const regex = new RegExp(rule2?.condition.regexFilter ?? '');
+      expect(regex.test('https://google.com/search?q=yt')).toBe(false);
+    });
+
+    it('rule 2 regex captures query text for substitution', () => {
+      const rule2 = dnrRules.find(r => r.priority === 2);
+      const regex = new RegExp(rule2?.condition.regexFilter ?? '');
+      const match = regex.exec('https://google.com/search?q=yt+lofi+hip+hop');
+      expect(match?.[1]).toBe('lofi+hip+hop');
+    });
+  });
 });

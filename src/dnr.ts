@@ -14,7 +14,7 @@ function buildQueryRegex(key: string): string {
 
 function buildParamQueryRegex(key: string): string {
   const escapedKey = escapeRegex(key);
-  return `[?&]q=${escapedKey}(?:\\+|%20)(.+?)(?:&|$)`;
+  return `^.*[?&]q=${escapedKey}(?:\\+|%20)(.+?)(?:&.*)?$`;
 }
 
 function resolveShortcutUrl(shortcut: Shortcut): string | null {
