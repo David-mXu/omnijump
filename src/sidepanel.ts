@@ -1,6 +1,7 @@
 import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, deleteShortcut, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
 import { buildShortcutRow, hoveredRow, normalizeUrl } from './ui';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
+import { fuzzyFilter } from './fuzzy';
 import { Shortcut, Suggestion } from './types';
 
 // ── Tab elements ──────────────────────────────────────────────────────────────
@@ -102,14 +103,8 @@ let settingsCache = { maxShortcuts: 500, filterThreshold: 25, darkMode: false };
 function renderList(): void {
   filterInput.hidden = shortcutCache.length < settingsCache.filterThreshold;
 
-  const query = filterInput.value.toLowerCase();
-  const filtered = query
-    ? shortcutCache.filter(s =>
-        s.key.includes(query) ||
-        s.url.toLowerCase().includes(query) ||
-        (s.label ?? '').toLowerCase().includes(query)
-      )
-    : shortcutCache;
+  const query = filterInput.value.trim();
+  const filtered = query ? fuzzyFilter(query, shortcutCache) : shortcutCache;
 
   countEl.textContent = `${shortcutCache.length} / ${settingsCache.maxShortcuts}`;
 
