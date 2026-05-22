@@ -27,12 +27,17 @@ nav {
   padding-bottom: 1em;
   margin-bottom: 2em;
   font-size: 0.95rem;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 1.2em;
+  overflow-x: auto;
+  white-space: nowrap;
 }
 
 nav a {
   color: #0969da;
   text-decoration: none;
-  margin-right: 1.5em;
+  flex: 0 0 auto;
 }
 
 nav a:hover {
