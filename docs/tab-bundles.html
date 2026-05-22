@@ -13,7 +13,7 @@
       <a href="getting-started.html">Getting Started</a>
       <a href="redirect-shortcuts.html">Redirect Shortcuts</a>
       <a href="search-shortcuts.html">Search Shortcuts</a>
-      <a href="tab-bundles.html" class="active">Tab Bundles</a> class="active"
+      <a href="tab-bundles.html" class="active">Tab Bundles</a>
       <a href="settings.html">Settings</a>
       <a href="faq.html">FAQ</a>
       <a href="privacy.html">Privacy</a>
@@ -122,6 +122,36 @@
     <li><strong>Label your bundles:</strong> A short label (e.g., "Daily standup" or "Client project") helps you remember what each bundle does months later.</li>
     <li><strong>Start with fewer URLs:</strong> You can always add more later. Start with 3-5 essential URLs per bundle.</li>
   </ul>
-$SCRIPT_CONTENT
+
+  <script>
+    function updateToggle(theme) {
+      const toggle = document.getElementById('theme-toggle');
+      if (toggle) toggle.textContent = theme === 'dark' ? '☀️' : '🌙';
+    }
+
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      updateToggle(theme);
+    }
+
+    function initTheme() {
+      const stored = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const theme = stored !== null ? stored : (prefersDark ? 'dark' : 'light');
+      setTheme(theme);
+    }
+
+    const toggle = document.getElementById('theme-toggle');
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        const next = current === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('theme', next);
+        setTheme(next);
+      });
+    }
+
+    initTheme();
+  </script>
 </body>
 </html>

@@ -16,7 +16,7 @@
       <a href="tab-bundles.html">Tab Bundles</a>
       <a href="settings.html">Settings</a>
       <a href="faq.html">FAQ</a>
-      <a href="privacy.html" class="active">Privacy</a> class="active"
+      <a href="privacy.html" class="active">Privacy</a>
     </div>
     <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode">🌙</button>
   </nav>
@@ -43,6 +43,36 @@
 
   <h2>Contact</h2>
   <p>Questions? <a href="mailto:davidmingxu@gmail.com">Send me an email</a></p>
-$SCRIPT_CONTENT
+
+  <script>
+    function updateToggle(theme) {
+      const toggle = document.getElementById('theme-toggle');
+      if (toggle) toggle.textContent = theme === 'dark' ? '☀️' : '🌙';
+    }
+
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      updateToggle(theme);
+    }
+
+    function initTheme() {
+      const stored = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const theme = stored !== null ? stored : (prefersDark ? 'dark' : 'light');
+      setTheme(theme);
+    }
+
+    const toggle = document.getElementById('theme-toggle');
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        const next = current === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('theme', next);
+        setTheme(next);
+      });
+    }
+
+    initTheme();
+  </script>
 </body>
 </html>

@@ -14,7 +14,7 @@
       <a href="redirect-shortcuts.html">Redirect Shortcuts</a>
       <a href="search-shortcuts.html">Search Shortcuts</a>
       <a href="tab-bundles.html">Tab Bundles</a>
-      <a href="settings.html" class="active">Settings</a> class="active"
+      <a href="settings.html" class="active">Settings</a>
       <a href="faq.html">FAQ</a>
       <a href="privacy.html">Privacy</a>
     </div>
@@ -106,6 +106,36 @@
 
   <h2>Sync Across Devices</h2>
   <p>All shortcuts and settings sync automatically to other Chrome devices where you're signed in. Changes propagate within a few seconds with no manual action needed. See the <a href="privacy.html">Privacy Policy</a> for how your data is stored.</p>
-$SCRIPT_CONTENT
+
+  <script>
+    function updateToggle(theme) {
+      const toggle = document.getElementById('theme-toggle');
+      if (toggle) toggle.textContent = theme === 'dark' ? '☀️' : '🌙';
+    }
+
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      updateToggle(theme);
+    }
+
+    function initTheme() {
+      const stored = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const theme = stored !== null ? stored : (prefersDark ? 'dark' : 'light');
+      setTheme(theme);
+    }
+
+    const toggle = document.getElementById('theme-toggle');
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        const next = current === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('theme', next);
+        setTheme(next);
+      });
+    }
+
+    initTheme();
+  </script>
 </body>
 </html>
