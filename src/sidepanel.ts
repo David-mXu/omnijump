@@ -54,6 +54,10 @@ const dismissSuggestionBtn = document.getElementById('dismissSuggestion') as HTM
 const searchToggleBtn = document.getElementById('searchToggle') as HTMLButtonElement;
 const searchFieldsEl = document.getElementById('searchFields') as HTMLDivElement;
 const redirectUrlTemplateInput = document.getElementById('redirectUrlTemplate') as HTMLInputElement;
+const pickRedirectTabBtn = document.getElementById('pickRedirectTab') as HTMLButtonElement;
+const redirectTabPickerEl = document.getElementById('redirectTabPicker') as HTMLDivElement;
+const redirectTabPickListEl = document.getElementById('redirectTabPickList') as HTMLDivElement;
+const cancelRedirectPickerBtn = document.getElementById('cancelRedirectPicker') as HTMLButtonElement;
 
 // ── Settings panel ────────────────────────────────────────────────────────────
 const weeklyChartEl = document.getElementById('weeklyChart') as HTMLDivElement;
@@ -163,6 +167,10 @@ deleteSelectedBtn.addEventListener('click', async () => {
 });
 
 // ── Add Redirect form ─────────────────────────────────────────────────────────
+// Track what was auto-filled so we can detect user edits on tab switch
+let autofillKey = '';
+let autofillUrl = '';
+
 function setRedirectStatus(msg: string, type: 'error' | 'success' | '' = ''): void {
   addRedirectStatusEl.textContent = msg;
   addRedirectStatusEl.className = type;
@@ -197,11 +205,14 @@ function renderRedirectUrlAncestors(url: string): void {
 function initRedirectForm(tab: chrome.tabs.Tab | undefined): void {
   if (!tab?.url) return;
   redirectUrlInput.value = tab.url;
+  autofillUrl = tab.url;
   renderRedirectUrlAncestors(tab.url);
-  // shortcutCache is populated by refresh() before this runs
   const existingKeys = new Set(shortcutCache.map(s => s.key));
   const suggested = suggestKeyFromUrl(tab.url);
-  if (suggested) redirectKeyInput.value = uniqueKey(suggested, existingKeys);
+  if (suggested) {
+    redirectKeyInput.value = uniqueKey(suggested, existingKeys);
+    autofillKey = redirectKeyInput.value;
+  }
 }
 
 saveRedirectBtn.addEventListener('click', async () => {
@@ -349,6 +360,56 @@ async function openTabPicker(): Promise<void> {
 addAllTabsBtn.addEventListener('click', addAllOpenTabs);
 pickTabsBtn.addEventListener('click', () => { shortcutPickerEl.hidden = true; openTabPicker(); });
 cancelPickerBtn.addEventListener('click', () => { tabPickerEl.hidden = true; });
+
+async function openRedirectTabPicker(): Promise<void> {
+  const tabs = await chrome.tabs.query({ currentWindow: true });
+  const httpTabs = tabs.filter(t => t.url?.startsWith('http'));
+  redirectTabPickListEl.innerHTML = '';
+  if (httpTabs.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'picker-empty';
+    empty.textContent = 'No open tabs found.';
+    redirectTabPickListEl.appendChild(empty);
+  } else {
+    httpTabs.forEach(tab => {
+      const row = document.createElement('div');
+      row.className = 'tab-pick-row';
+
+      const favicon = document.createElement('img');
+      favicon.className = 'tab-favicon';
+      favicon.width = 14;
+      favicon.height = 14;
+      favicon.src = tab.favIconUrl ?? '';
+      favicon.onerror = () => { favicon.style.display = 'none'; };
+
+      const title = document.createElement('span');
+      title.className = 'tab-title';
+      title.textContent = tab.title ?? tab.url ?? '';
+      title.title = tab.url ?? '';
+
+      row.append(favicon, title);
+      row.addEventListener('click', () => {
+        if (!tab.url) return;
+        redirectUrlInput.value = tab.url;
+        autofillUrl = tab.url;
+        const existingKeys = new Set(shortcutCache.map(s => s.key));
+        const suggested = suggestKeyFromUrl(tab.url);
+        if (suggested && (!redirectKeyInput.value || redirectKeyInput.value === autofillKey)) {
+          redirectKeyInput.value = uniqueKey(suggested, existingKeys);
+          autofillKey = redirectKeyInput.value;
+        }
+        renderRedirectUrlAncestors(tab.url);
+        redirectTabPickerEl.hidden = true;
+      });
+
+      redirectTabPickListEl.appendChild(row);
+    });
+  }
+  redirectTabPickerEl.hidden = false;
+}
+
+pickRedirectTabBtn.addEventListener('click', openRedirectTabPicker);
+cancelRedirectPickerBtn.addEventListener('click', () => { redirectTabPickerEl.hidden = true; });
 
 useSelectedTabsBtn.addEventListener('click', () => {
   const urls = Array.from(tabPickListEl.querySelectorAll<HTMLInputElement>('.tab-pick-cb:checked'))
@@ -660,17 +721,22 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 // ── TIP suggestion ────────────────────────────────────────────────────────────
-async function checkTipSuggestion(tab: chrome.tabs.Tab | undefined): Promise<void> {
-  if (!tab?.id) return;
+async function checkTipSuggestion(tab: chrome.tabs.Tab | undefined, fillForm = true): Promise<void> {
+  if (!tab?.id) { suggestionEl.hidden = true; return; }
   const r = await chrome.storage.session.get(`suggestion_${tab.id}`);
   const suggestion = r[`suggestion_${tab.id}`] as Suggestion | undefined;
-  if (!suggestion) return;
+  if (!suggestion) { suggestionEl.hidden = true; return; }
 
   suggestionTextEl.textContent =
     `You often search ${suggestion.siteName}. Save "${suggestion.key}" as a shortcut?`;
   suggestionEl.hidden = false;
-  redirectKeyInput.value = suggestion.key;
-  redirectUrlInput.value = suggestion.url;
+
+  if (fillForm) {
+    redirectKeyInput.value = suggestion.key;
+    redirectUrlInput.value = suggestion.url;
+    autofillKey = suggestion.key;
+    autofillUrl = suggestion.url;
+  }
 
   const tabId = tab.id;
   saveSuggestionBtn.onclick = async () => {
@@ -690,6 +756,24 @@ async function checkTipSuggestion(tab: chrome.tabs.Tab | undefined): Promise<voi
     suggestionEl.hidden = true;
   };
 }
+
+// ── Tab-aware updates ─────────────────────────────────────────────────────────
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    // Capture dirty state before checkTipSuggestion may update autofill vars
+    const formIsDirty =
+      (redirectKeyInput.value !== '' && redirectKeyInput.value !== autofillKey) ||
+      (redirectUrlInput.value !== '' && redirectUrlInput.value !== autofillUrl);
+
+    await checkTipSuggestion(tab, !formIsDirty);
+
+    // Re-init the form only when it's clean, no suggestion is showing, and tab is HTTP
+    if (!formIsDirty && suggestionEl.hidden && tab.url?.startsWith('http')) {
+      initRedirectForm(tab);
+    }
+  } catch { /* non-fatal */ }
+});
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 redirectKeyInput.addEventListener('keydown', (e) => {

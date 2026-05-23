@@ -54,6 +54,10 @@ const dismissSuggestionBtn = document.getElementById('dismissSuggestion') as HTM
 const searchToggleBtn = document.getElementById('searchToggle') as HTMLButtonElement;
 const searchFieldsEl = document.getElementById('searchFields') as HTMLDivElement;
 const redirectUrlTemplateInput = document.getElementById('redirectUrlTemplate') as HTMLInputElement;
+const pickRedirectTabBtn = document.getElementById('pickRedirectTab') as HTMLButtonElement;
+const redirectTabPickerEl = document.getElementById('redirectTabPicker') as HTMLDivElement;
+const redirectTabPickListEl = document.getElementById('redirectTabPickList') as HTMLDivElement;
+const cancelRedirectPickerBtn = document.getElementById('cancelRedirectPicker') as HTMLButtonElement;
 
 // ── Settings panel ────────────────────────────────────────────────────────────
 const weeklyChartEl = document.getElementById('weeklyChart') as HTMLDivElement;
@@ -316,6 +320,53 @@ async function openTabPicker(): Promise<void> {
 addAllTabsBtn.addEventListener('click', addAllOpenTabs);
 pickTabsBtn.addEventListener('click', () => { shortcutPickerEl.hidden = true; openTabPicker(); });
 cancelPickerBtn.addEventListener('click', () => { tabPickerEl.hidden = true; });
+
+async function openRedirectTabPicker(): Promise<void> {
+  const tabs = await chrome.tabs.query({ currentWindow: true });
+  const httpTabs = tabs.filter(t => t.url?.startsWith('http'));
+  redirectTabPickListEl.innerHTML = '';
+  if (httpTabs.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'picker-empty';
+    empty.textContent = 'No open tabs found.';
+    redirectTabPickListEl.appendChild(empty);
+  } else {
+    httpTabs.forEach(tab => {
+      const row = document.createElement('div');
+      row.className = 'tab-pick-row';
+
+      const favicon = document.createElement('img');
+      favicon.className = 'tab-favicon';
+      favicon.width = 14;
+      favicon.height = 14;
+      favicon.src = tab.favIconUrl ?? '';
+      favicon.onerror = () => { favicon.style.display = 'none'; };
+
+      const title = document.createElement('span');
+      title.className = 'tab-title';
+      title.textContent = tab.title ?? tab.url ?? '';
+      title.title = tab.url ?? '';
+
+      row.append(favicon, title);
+      row.addEventListener('click', () => {
+        if (!tab.url) return;
+        redirectUrlInput.value = tab.url;
+        if (!redirectKeyInput.value) {
+          const existingKeys = new Set(shortcutCache.map(s => s.key));
+          const suggested = suggestKeyFromUrl(tab.url);
+          if (suggested) redirectKeyInput.value = uniqueKey(suggested, existingKeys);
+        }
+        redirectTabPickerEl.hidden = true;
+      });
+
+      redirectTabPickListEl.appendChild(row);
+    });
+  }
+  redirectTabPickerEl.hidden = false;
+}
+
+pickRedirectTabBtn.addEventListener('click', openRedirectTabPicker);
+cancelRedirectPickerBtn.addEventListener('click', () => { redirectTabPickerEl.hidden = true; });
 
 useSelectedTabsBtn.addEventListener('click', () => {
   const urls = Array.from(tabPickListEl.querySelectorAll<HTMLInputElement>('.tab-pick-cb:checked'))
