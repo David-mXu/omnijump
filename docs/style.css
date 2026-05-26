@@ -78,6 +78,32 @@ nav a.active {
   text-decoration: none;
 }
 
+@media (max-width: 640px) {
+  body {
+    padding: 5.75rem 16px 40px;
+  }
+
+  nav {
+    padding: 0.55em 16px;
+  }
+
+  nav > div {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  nav > div::-webkit-scrollbar {
+    display: none;
+  }
+
+  nav a {
+    white-space: nowrap;
+  }
+}
+
 :root[data-theme="dark"] nav a {
   color: #58a6ff;
 }
