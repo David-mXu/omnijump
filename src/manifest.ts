@@ -35,22 +35,30 @@ export default function createManifest(target: BrowserTarget): Manifest {
       },
     },
     options_page: 'src/options.html',
-    background: {
-      service_worker: 'src/background.ts',
-      type: 'module',
-    },
+    background: isFirefox
+      ? ({ scripts: ['src/background.ts'], type: 'module' } as unknown as Manifest['background'])
+      : { service_worker: 'src/background.ts', type: 'module' },
     permissions: BASE_PERMISSIONS,
     host_permissions: ['<all_urls>'],
-    minimum_chrome_version: '120',
-    commands: {
-      'open-side-panel': {
-        suggested_key: {
-          default: 'Ctrl+Shift+S',
-          mac: 'MacCtrl+Shift+S',
+    commands: isFirefox
+      ? {
+          '_execute_sidebar_action': {
+            suggested_key: {
+              default: 'Ctrl+Shift+S',
+              mac: 'MacCtrl+Shift+S',
+            },
+            description: 'Open OmniJump side panel',
+          },
+        }
+      : {
+          'open-side-panel': {
+            suggested_key: {
+              default: 'Ctrl+Shift+S',
+              mac: 'MacCtrl+Shift+S',
+            },
+            description: 'Open OmniJump side panel',
+          },
         },
-        description: 'Open OmniJump side panel',
-      },
-    },
   };
 
   if (isFirefox) {
@@ -72,6 +80,7 @@ export default function createManifest(target: BrowserTarget): Manifest {
       default_title: 'OmniJump',
     };
   } else {
+    manifest.minimum_chrome_version = '120';
     manifest.permissions = [
       ...(manifest.permissions ?? []),
       'sidePanel' as chrome.runtime.ManifestPermissions,

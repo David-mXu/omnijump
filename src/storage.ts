@@ -165,6 +165,25 @@ export async function renameShortcut(originalKey: string, updated: Shortcut): Pr
   await chrome.storage.sync.remove(`${SHORTCUT_PREFIX}${oldKey}`);
 }
 
+export async function clearAllStats(): Promise<void> {
+  const all = await chrome.storage.sync.get(null);
+  const writes: Record<string, Shortcut> = {};
+
+  for (const [k, v] of Object.entries(all)) {
+    if (k.startsWith(SHORTCUT_PREFIX)) {
+      const shortcut = { ...(v as Shortcut) };
+      delete shortcut.useCount;
+      delete shortcut.lastUsed;
+      writes[k] = shortcut;
+    }
+  }
+
+  await Promise.all([
+    chrome.storage.local.remove(DAILY_KEY),
+    Object.keys(writes).length > 0 ? chrome.storage.sync.set(writes) : Promise.resolve(),
+  ]);
+}
+
 export async function cleanupStaleShortcuts(): Promise<void> {
   const store = await getStore();
   if (!store.settings.staleAutoDelete) return;

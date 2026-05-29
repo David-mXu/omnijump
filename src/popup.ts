@@ -1,3 +1,4 @@
+import { openSidePanel } from './platform';
 import { addDismissedHost, getStore, normalizeKey, upsertShortcut } from './storage';
 import { suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
 import { Suggestion } from './types';
@@ -132,7 +133,7 @@ init();
 document.getElementById('openPanel')?.addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab?.id !== undefined) {
-    await chrome.sidePanel.open({ tabId: tab.id });
+    openSidePanel(tab.id);
   }
   window.close();
 });

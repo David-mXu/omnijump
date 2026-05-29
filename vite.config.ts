@@ -15,6 +15,11 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: `dist/${browser}`,
       emptyOutDir: true,
+      ...(browser === 'firefox' && {
+        rollupOptions: {
+          input: { sidepanel: 'src/sidepanel.html' },
+        },
+      }),
     },
   };
 });

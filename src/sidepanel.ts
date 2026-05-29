@@ -1,4 +1,5 @@
-import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, deleteShortcut, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
+import { IS_FIREFOX } from './platform';
+import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, clearAllStats, deleteShortcut, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
 import { buildShortcutRow, hoveredRow, normalizeUrl } from './ui';
 import { suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
 import { fuzzyFilter } from './fuzzy';
@@ -62,6 +63,8 @@ const cancelRedirectPickerBtn = document.getElementById('cancelRedirectPicker') 
 // ── Settings panel ────────────────────────────────────────────────────────────
 const weeklyChartEl = document.getElementById('weeklyChart') as HTMLDivElement;
 const weekTotalEl = document.getElementById('weekTotal') as HTMLDivElement;
+const clearStatsBtn = document.getElementById('clearStatsBtn') as HTMLButtonElement;
+const clearStatsStatusEl = document.getElementById('clearStatsStatus') as HTMLDivElement;
 const exportBtn = document.getElementById('exportBtn') as HTMLButtonElement;
 const importBtn = document.getElementById('importBtn') as HTMLButtonElement;
 const importFile = document.getElementById('importFile') as HTMLInputElement;
@@ -69,6 +72,7 @@ const dataStatusEl = document.getElementById('dataStatus') as HTMLDivElement;
 const shortcutPopupEl = document.getElementById('shortcutPopup') as HTMLSpanElement;
 const shortcutPanelEl = document.getElementById('shortcutPanel') as HTMLSpanElement;
 const customizeBtn = document.getElementById('customizeShortcut') as HTMLButtonElement;
+if (IS_FIREFOX) customizeBtn.hidden = true;
 const maxShortcutsInput = document.getElementById('maxShortcutsInput') as HTMLInputElement;
 const saveMaxBtn = document.getElementById('saveMaxShortcuts') as HTMLButtonElement;
 const settingsStatusEl = document.getElementById('settingsStatus') as HTMLDivElement;
@@ -499,6 +503,31 @@ bundleForm.addEventListener('submit', async (event) => {
 });
 
 // ── Settings tab ──────────────────────────────────────────────────────────────
+function renderWeeklyChart(counts: Record<string, number>): void {
+  const last7 = Array.from({ length: 7 }, (_, i) =>
+    new Date(Date.now() - (6 - i) * 86_400_000).toISOString().slice(0, 10)
+  );
+  const weekTotal = last7.reduce((s, d) => s + (counts[d] ?? 0), 0);
+  const max = Math.max(1, ...last7.map(d => counts[d] ?? 0));
+  weeklyChartEl.innerHTML = '';
+  last7.forEach(date => {
+    const bar = document.createElement('div');
+    bar.className = 'week-bar';
+    bar.style.height = `${Math.round(((counts[date] ?? 0) / max) * 40)}px`;
+    bar.title = `${date}: ${counts[date] ?? 0} opens`;
+    weeklyChartEl.appendChild(bar);
+  });
+  weekTotalEl.textContent = `${weekTotal} shortcut open${weekTotal !== 1 ? 's' : ''} this week`;
+}
+
+clearStatsBtn.addEventListener('click', async () => {
+  await clearAllStats();
+  renderWeeklyChart({});
+  clearStatsStatusEl.textContent = 'Stats cleared.';
+  setTimeout(() => { clearStatsStatusEl.textContent = ''; }, 2000);
+  await refresh();
+});
+
 tabSettingsBtn.addEventListener('click', async () => {
   showTab('settings');
 
@@ -529,20 +558,7 @@ tabSettingsBtn.addEventListener('click', async () => {
 
   // Weekly usage chart
   const counts = (localResult[DAILY_KEY] ?? {}) as Record<string, number>;
-  const last7 = Array.from({ length: 7 }, (_, i) => {
-    return new Date(Date.now() - (6 - i) * 86_400_000).toISOString().slice(0, 10);
-  });
-  const weekTotal = last7.reduce((s, d) => s + (counts[d] ?? 0), 0);
-  const max = Math.max(1, ...last7.map(d => counts[d] ?? 0));
-  weeklyChartEl.innerHTML = '';
-  last7.forEach(date => {
-    const bar = document.createElement('div');
-    bar.className = 'week-bar';
-    bar.style.height = `${Math.round(((counts[date] ?? 0) / max) * 40)}px`;
-    bar.title = `${date}: ${counts[date] ?? 0} opens`;
-    weeklyChartEl.appendChild(bar);
-  });
-  weekTotalEl.textContent = `${weekTotal} shortcut open${weekTotal !== 1 ? 's' : ''} this week`;
+  renderWeeklyChart(counts);
 
   dataStatusEl.textContent = '';
 });

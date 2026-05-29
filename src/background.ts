@@ -1,4 +1,5 @@
 import { rebuildDynamicRules } from './dnr';
+import { openSidePanel } from './platform';
 import { SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, cleanupStaleShortcuts, getDismissedHosts, getStore, migrateFromLegacyStorage, normalizeKey, touchShortcut, upsertShortcut } from './storage';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
 import { ShortcutStore, Suggestion } from './types';
@@ -126,9 +127,13 @@ async function clearTipState(
   sessions[tabId] = null;
   await Promise.all([
     chrome.storage.session.set({ tabActiveSessions: sessions }),
-    chrome.action.setBadgeText({ tabId, text: '' }),
     chrome.storage.session.remove(`suggestion_${tabId}`),
   ]);
+  try {
+    await chrome.action.setBadgeText({ tabId, text: '' });
+  } catch {
+    // Tab was closed before badge could be cleared
+  }
 }
 
 async function handleSmartTip(url: string, tabId: number): Promise<void> {
@@ -191,8 +196,12 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
     const key = buildSuggestedKey(host, store);
     const suggestion: Suggestion = { key, url: hit.baseUrl, siteName, host };
     await chrome.storage.session.set({ [`suggestion_${tabId}`]: suggestion });
-    await chrome.action.setBadgeBackgroundColor({ color: '#4c6ef5' });
-    await chrome.action.setBadgeText({ tabId, text: 'TIP' });
+    try {
+      await chrome.action.setBadgeBackgroundColor({ color: '#4c6ef5' });
+      await chrome.action.setBadgeText({ tabId, text: 'TIP' });
+    } catch {
+      // Tab was closed before badge could be set
+    }
   }
 }
 
@@ -281,7 +290,7 @@ chrome.commands.onCommand.addListener((command, tab) => {
   } else {
     // Open: must happen before any await to keep the user-gesture context alive.
     if (tab?.id !== undefined) {
-      chrome.sidePanel.open({ tabId: tab.id });
+      openSidePanel(tab.id);
     }
   }
 });
@@ -303,6 +312,42 @@ async function handleShortcutTouch(url: string): Promise<void> {
   await touchShortcut(normalized);
 }
 
+// Fallback JS redirect for browsers (e.g. Edge) that bypass DNR for
+// navigations to the configured search engine. DNR handles Chrome/Bing;
+// this catches what DNR misses without conflicting when DNR also fires.
+async function handleJsRedirect(url: string, tabId: number): Promise<void> {
+  const query = extractQuery(url);
+  if (!query) return;
+
+  const parts = query.trim().split(/\s+/);
+  const normalized = normalizeKey(parts[0]);
+  const store = await getStore();
+  const shortcut = store.shortcuts[normalized];
+  if (!shortcut) return;
+
+  const hasArgs = parts.length > 1;
+  let target: string | null = null;
+
+  if (!hasArgs) {
+    if (shortcut.type === 'redirect') {
+      target = shortcut.url;
+    } else if (shortcut.type === 'bundle') {
+      target = shortcut.bundleUrls?.[0] ?? shortcut.url ?? null;
+    }
+  }
+
+  if (shortcut.type === 'parameterized' && shortcut.urlTemplate) {
+    const args = parts.slice(1).join(' ');
+    target = args
+      ? shortcut.urlTemplate.replace('%s', encodeURIComponent(args))
+      : shortcut.url;
+  }
+
+  if (target) {
+    await chrome.tabs.update(tabId, { url: target });
+  }
+}
+
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (details.frameId !== 0 || !details.url || details.tabId < 0) {
     return;
@@ -310,6 +355,7 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
 
   void handleBundleNavigation(details.url, details.tabId);
   void handleShortcutTouch(details.url);
+  void handleJsRedirect(details.url, details.tabId);
 });
 
 chrome.webNavigation.onCommitted.addListener((details) => {
