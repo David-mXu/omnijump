@@ -12,7 +12,7 @@ async function syncRules(): Promise<void> {
   }
 }
 
-const TIP_THRESHOLD = 5;
+const TIP_THRESHOLD = 3;
 
 const SEARCH_PARAMS = ['q', 'query', 'search_query', 'search', 'k', 'keyword', 's', 'text'];
 
@@ -115,9 +115,16 @@ async function finalizeTabSession(
 ): Promise<void> {
   const r = await chrome.storage.session.get('searchVisitCounts');
   const counts = (r.searchVisitCounts ?? {}) as Record<string, number>;
-  const key = `${session.host}|${session.param}`;
-  counts[key] = (counts[key] ?? 0) + 1;
+  counts[session.host] = (counts[session.host] ?? 0) + 1;
   await chrome.storage.session.set({ searchVisitCounts: counts });
+}
+
+async function resetTabSession(
+  tabId: number,
+  sessions: Record<number, { host: string; param: string; baseUrl: string } | null>
+): Promise<void> {
+  sessions[tabId] = null;
+  await chrome.storage.session.set({ tabActiveSessions: sessions });
 }
 
 async function clearTipState(
@@ -137,13 +144,18 @@ async function clearTipState(
 }
 
 async function handleSmartTip(url: string, tabId: number): Promise<void> {
-  const hit = detectSearch(url);
-  const host = hit?.host ?? null;
+  let host: string | null = null;
+  let siteUrl: string | null = null;
 
-  const sessionKeys = hit
-    ? ['tabActiveSessions', 'searchVisitCounts']
-    : ['tabActiveSessions'];
-  const sessRes = await chrome.storage.session.get(sessionKeys);
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      host = parsed.hostname.replace(/^www\./, '');
+      siteUrl = `${parsed.protocol}//${host}/`;
+    }
+  } catch { /* ignore non-URL */ }
+
+  const sessRes = await chrome.storage.session.get(['tabActiveSessions', 'searchVisitCounts']);
   const sessions = (sessRes.tabActiveSessions ?? {}) as Record<number, { host: string; param: string; baseUrl: string } | null>;
   const prev = sessions[tabId] ?? null;
 
@@ -151,13 +163,13 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
     await finalizeTabSession(prev);
   }
 
-  if (!hit || !host) {
-    await clearTipState(tabId, sessions);
+  if (!host || !siteUrl) {
+    await resetTabSession(tabId, sessions);
     return;
   }
 
   if (isBlocklisted(host)) {
-    await clearTipState(tabId, sessions);
+    await resetTabSession(tabId, sessions);
     return;
   }
 
@@ -168,9 +180,10 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
     return;
   }
 
-  const alreadyCovered = Object.values(store.shortcuts).some(
-    (s) => s.url.startsWith(hit.baseUrl)
-  );
+  const alreadyCovered = Object.values(store.shortcuts).some((s) => {
+    try { return new URL(s.url).hostname.replace(/^www\./, '') === host; }
+    catch { return false; }
+  });
   if (alreadyCovered) {
     await clearTipState(tabId, sessions);
     return;
@@ -183,18 +196,17 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
   }
 
   if (!prev || prev.host !== host) {
-    sessions[tabId] = { host, param: hit.param, baseUrl: hit.baseUrl };
+    sessions[tabId] = { host, param: '', baseUrl: siteUrl };
     await chrome.storage.session.set({ tabActiveSessions: sessions });
   }
 
   const counts = (sessRes.searchVisitCounts ?? {}) as Record<string, number>;
-  const countKey = `${host}|${hit.param}`;
-  const total = (counts[countKey] ?? 0) + 1;
+  const total = (counts[host] ?? 0) + 1;
 
   if (total >= TIP_THRESHOLD) {
     const siteName = formatSiteName(host);
     const key = buildSuggestedKey(host, store);
-    const suggestion: Suggestion = { key, url: hit.baseUrl, siteName, host };
+    const suggestion: Suggestion = { key, url: siteUrl, siteName, host };
     await chrome.storage.session.set({ [`suggestion_${tabId}`]: suggestion });
     try {
       await chrome.action.setBadgeBackgroundColor({ color: '#4c6ef5' });

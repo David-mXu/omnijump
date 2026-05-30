@@ -756,7 +756,7 @@ async function checkTipSuggestion(tab: chrome.tabs.Tab | undefined, fillForm = t
   if (!suggestion) { suggestionEl.hidden = true; return; }
 
   suggestionTextEl.textContent =
-    `You often search ${suggestion.siteName}. Save "${suggestion.key}" as a shortcut?`;
+    `You often visit ${suggestion.siteName}. Save "${suggestion.key}" as a shortcut?`;
   suggestionEl.hidden = false;
 
   if (fillForm) {

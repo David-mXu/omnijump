@@ -701,7 +701,7 @@ async function checkTipSuggestion(): Promise<void> {
     const suggestion = r[`suggestion_${tab.id}`];
     if (!suggestion) return;
     suggestionTextEl.textContent =
-      `You often search ${suggestion.siteName}. Save "${suggestion.key}" as a shortcut?`;
+      `You often visit ${suggestion.siteName}. Save "${suggestion.key}" as a shortcut?`;
     suggestionEl.hidden = false;
     redirectKeyInput.value = suggestion.key;
     redirectUrlInput.value = suggestion.url;
