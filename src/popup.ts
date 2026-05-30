@@ -1,4 +1,4 @@
-import { openSidePanel } from './platform';
+import { IS_FIREFOX, openSidePanel } from './platform';
 import { addDismissedHost, getStore, normalizeKey, upsertShortcut } from './storage';
 import { suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
 import { Suggestion } from './types';
@@ -131,6 +131,13 @@ form?.addEventListener('submit', async (event) => {
 init();
 
 document.getElementById('openPanel')?.addEventListener('click', async () => {
+  // Firefox: sidebarAction.open() must be called synchronously within the user
+  // gesture — calling it after any await causes Firefox to drop it.
+  if (IS_FIREFOX) {
+    openSidePanel(0);
+    window.close();
+    return;
+  }
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab?.id !== undefined) {
     openSidePanel(tab.id);
