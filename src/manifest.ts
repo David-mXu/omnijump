@@ -49,6 +49,9 @@ export default function createManifest(target: BrowserTarget): Manifest {
             },
             description: 'Open OmniJump side panel',
           },
+          '_execute_action': {
+            description: 'Open OmniJump popup',
+          },
         }
       : {
           'open-side-panel': {
