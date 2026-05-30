@@ -73,7 +73,11 @@ export default function createManifest(target: BrowserTarget): Manifest {
     }).browser_specific_settings = {
       gecko: {
         id: 'omnijump@example.com',
-        strict_min_version: '128.0',
+        strict_min_version: '140.0',
+        data_collection_permissions: {
+          required: ['none'],
+          optional: [],
+        },
       },
     };
     (manifest as Manifest & {

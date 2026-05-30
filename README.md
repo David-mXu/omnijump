@@ -2,6 +2,8 @@
 
 **Instant address-bar shortcuts for redirects, tab bundles, and dynamic searches.**
 
+**[Website](https://david-mxu.github.io/omnijump/)**
+
 OmniJump is a Manifest V3 browser extension for Chrome (and Firefox) that lets you save short keywords and trigger them straight from the browser's address bar — no mouse, no bookmarks toolbar, no context switching.
 
 ---
