@@ -1,0 +1,42 @@
+name: Publish to Firefox Add-ons
+
+on:
+  push:
+    tags:
+      - 'firefox/v*'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+
+  publish-firefox:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build:firefox
+
+      - name: Submit to Firefox Add-ons
+        run: |
+          npx web-ext sign \
+            --channel=listed \
+            --api-key=${{ secrets.FIREFOX_API_KEY }} \
+            --api-secret=${{ secrets.FIREFOX_API_SECRET }} \
+            --source-dir=dist/firefox \
+            --artifacts-dir=web-ext-artifacts
