@@ -547,10 +547,13 @@ tabSettingsBtn.addEventListener('click', async () => {
     chrome.storage.local.get(DAILY_KEY),
   ]);
 
-  const panelCmd = commands.find((c) => c.name === 'open-side-panel');
+  const panelCmdName = IS_FIREFOX ? '_execute_sidebar_action' : 'open-side-panel';
+  const panelCmd = commands.find((c) => c.name === panelCmdName);
   const popupCmd = commands.find((c) => c.name === '_execute_action');
   shortcutPanelEl.textContent = panelCmd?.shortcut || 'not set';
   shortcutPopupEl.textContent = popupCmd?.shortcut || 'not set';
+  const firefoxHint = document.getElementById('firefoxShortcutHint');
+  if (firefoxHint) firefoxHint.hidden = !IS_FIREFOX;
 
   settingsCache = { ...store.settings };
   renderSettings();
