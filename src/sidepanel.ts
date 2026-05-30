@@ -127,12 +127,22 @@ function renderList(): void {
   listEl.replaceChildren(frag);
 }
 
+function renderSettings(): void {
+  darkModeToggle.checked = settingsCache.darkMode ?? false;
+  smartSuggestionsToggle.checked = settingsCache.smartSuggestions ?? false;
+  staleToggle.checked = settingsCache.staleAutoDelete;
+  staleDaysInput.value = String(settingsCache.staleDays);
+  maxShortcutsInput.value = String(settingsCache.maxShortcuts);
+  filterThresholdInput.value = String(settingsCache.filterThreshold);
+}
+
 async function refresh(): Promise<void> {
   const store = await getStore();
   shortcutCache = Object.values(store.shortcuts);
   settingsCache = { ...store.settings };
   document.body.classList.toggle('dark', settingsCache.darkMode);
   renderList();
+  renderSettings();
 }
 
 // Batches rapid onChanged bursts (e.g. bulk delete) into a single refresh.
@@ -542,12 +552,8 @@ tabSettingsBtn.addEventListener('click', async () => {
   shortcutPanelEl.textContent = panelCmd?.shortcut || 'not set';
   shortcutPopupEl.textContent = popupCmd?.shortcut || 'not set';
 
-  maxShortcutsInput.value = String(store.settings.maxShortcuts);
-  filterThresholdInput.value = String(store.settings.filterThreshold);
-  staleToggle.checked = store.settings.staleAutoDelete;
-  staleDaysInput.value = String(store.settings.staleDays);
-  darkModeToggle.checked = store.settings.darkMode ?? false;
-  smartSuggestionsToggle.checked = store.settings.smartSuggestions ?? false;
+  settingsCache = { ...store.settings };
+  renderSettings();
 
   settingsStatusEl.textContent = '';
   settingsStatusEl.className = '';
@@ -730,9 +736,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 // ── Live sync ─────────────────────────────────────────────────────────────────
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'sync') return;
-  if (Object.keys(changes).some(k => k.startsWith(SHORTCUT_PREFIX) || k === SETTINGS_KEY)) {
+  if (area === 'sync' && Object.keys(changes).some(k => k.startsWith(SHORTCUT_PREFIX) || k === SETTINGS_KEY)) {
     scheduleRefresh();
+  }
+  if (area === 'local' && DAILY_KEY in changes && !panelSettings.hidden) {
+    const counts = (changes[DAILY_KEY].newValue ?? {}) as Record<string, number>;
+    renderWeeklyChart(counts);
   }
 });
 
