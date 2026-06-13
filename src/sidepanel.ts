@@ -108,6 +108,18 @@ tabBundleBtn.addEventListener('click', () => showTab('bundle'));
 let shortcutCache: Shortcut[] = [];
 let settingsCache: UserSettings = { maxShortcuts: 500, filterThreshold: 25, darkMode: false, staleAutoDelete: true, staleDays: 90, smartSuggestions: false };
 
+function handleAlias(shortcut: Shortcut): void {
+  showTab('shortcuts');
+  redirectUrlInput.value = shortcut.url;
+  autofillUrl = shortcut.url;
+  redirectKeyInput.value = '';
+  autofillKey = '';
+  setRedirectStatus('');
+  renderRedirectUrlAncestors(shortcut.url);
+  redirectKeyInput.focus();
+  redirectKeyInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 function renderList(): void {
   filterInput.hidden = shortcutCache.length < settingsCache.filterThreshold;
 
@@ -123,7 +135,7 @@ function renderList(): void {
   listEl.hidden = isEmpty || noResults;
 
   const frag = document.createDocumentFragment();
-  filtered.forEach((s) => frag.appendChild(buildShortcutRow(s, refresh)));
+  filtered.forEach((s) => frag.appendChild(buildShortcutRow(s, refresh, handleAlias)));
   listEl.replaceChildren(frag);
 }
 

@@ -73,6 +73,7 @@ async function saveEdit(
 export function buildShortcutRow(
   shortcut: Shortcut,
   onRender: () => Promise<void>,
+  onAlias?: (shortcut: Shortcut) => void,
 ): HTMLLIElement {
   const li = document.createElement('li');
 
@@ -139,7 +140,20 @@ export function buildShortcutRow(
     await onRender();
   });
 
-  displayRow.append(item, editBtn, deleteBtn);
+  if (onAlias && shortcut.type !== 'bundle') {
+    const aliasBtn = document.createElement('button');
+    aliasBtn.type = 'button';
+    aliasBtn.className = 'btn-icon';
+    aliasBtn.title = 'Add alias';
+    aliasBtn.textContent = '+';
+    aliasBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onAlias(shortcut);
+    });
+    displayRow.append(item, aliasBtn, editBtn, deleteBtn);
+  } else {
+    displayRow.append(item, editBtn, deleteBtn);
+  }
 
   // ── Edit form ──────────────────────────────────────────────────────────────
   const editForm = document.createElement('div');
