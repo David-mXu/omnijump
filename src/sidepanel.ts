@@ -803,6 +803,19 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   } catch { /* non-fatal */ }
 });
 
+chrome.tabs.onUpdated.addListener(async (_tabId, changeInfo, tab) => {
+  if (!changeInfo.url || !tab.active) return;
+  const formIsDirty =
+    (redirectKeyInput.value !== '' && redirectKeyInput.value !== autofillKey) ||
+    (redirectUrlInput.value !== '' && redirectUrlInput.value !== autofillUrl);
+  try {
+    await checkTipSuggestion(tab, !formIsDirty);
+    if (!formIsDirty && suggestionEl.hidden && tab.url?.startsWith('http')) {
+      initRedirectForm(tab);
+    }
+  } catch { /* non-fatal */ }
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 redirectKeyInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); redirectUrlInput.focus(); }
