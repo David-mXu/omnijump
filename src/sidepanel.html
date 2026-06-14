@@ -90,6 +90,17 @@
       #count { font-size: 11px; color: #888; margin-bottom: 8px; }
       ul { list-style: none; padding: 0; margin: 0; }
       li { border-bottom: 1px solid #f0f0f0; }
+      li.alias-row { position: relative; }
+      li.alias-row::before {
+        content: '';
+        position: absolute;
+        left: 4px;
+        top: 0;
+        bottom: 0;
+        border-left: 2px solid #c5d0ff;
+      }
+      li.alias-row .display-row { padding-left: 14px; }
+      li.alias-row .url { display: none; }
 
       .display-row {
         display: flex;
@@ -406,6 +417,7 @@
       body.dark .btn-icon.danger:hover { color: #e05050; background: #2d1212; }
       body.dark .btn-link { color: #7b9eff; }
       body.dark li { border-bottom-color: #2a2a2a; }
+      body.dark li.alias-row::before { border-left-color: #3a4580; }
       body.dark .key { color: #e0e0e0; }
       body.dark .badge { background: #1e2a5e; color: #7b9eff; }
       body.dark .badge-search { background: #1a3325; color: #4caf50; }

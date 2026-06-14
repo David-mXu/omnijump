@@ -25,6 +25,7 @@ npm run test:watch
 ```
 
 No dev server is configured. Load the built extension from `dist/chrome` or `dist/firefox` in the browser's extension manager.
+Ensure to commit and push changes when appropriate.
 
 ## Architecture
 

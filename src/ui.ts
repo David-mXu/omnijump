@@ -74,8 +74,10 @@ export function buildShortcutRow(
   shortcut: Shortcut,
   onRender: () => Promise<void>,
   onAlias?: (shortcut: Shortcut) => void,
+  isAlias = false,
 ): HTMLLIElement {
   const li = document.createElement('li');
+  if (isAlias) li.classList.add('alias-row');
 
   // ── Display row ────────────────────────────────────────────────────────────
   const displayRow = document.createElement('div');

@@ -108,6 +108,30 @@ tabBundleBtn.addEventListener('click', () => showTab('bundle'));
 let shortcutCache: Shortcut[] = [];
 let settingsCache: UserSettings = { maxShortcuts: 500, filterThreshold: 25, darkMode: false, staleAutoDelete: true, staleDays: 90, smartSuggestions: false };
 
+function groupShortcuts(shortcuts: Shortcut[]): Array<{ shortcut: Shortcut; isAlias: boolean }> {
+  const groupKey = (s: Shortcut) =>
+    s.type === 'bundle' ? `bundle:${s.key}` :
+    s.type === 'parameterized' ? (s.urlTemplate ?? s.url) :
+    s.url.replace(/\/+$/, '');
+
+  const urlGroups = new Map<string, Shortcut[]>();
+  for (const s of shortcuts) {
+    const k = groupKey(s);
+    if (!urlGroups.has(k)) urlGroups.set(k, []);
+    urlGroups.get(k)!.push(s);
+  }
+
+  const emitted = new Set<string>();
+  const result: Array<{ shortcut: Shortcut; isAlias: boolean }> = [];
+  for (const s of shortcuts) {
+    const k = groupKey(s);
+    if (emitted.has(k)) continue;
+    emitted.add(k);
+    urlGroups.get(k)!.forEach((gs, i) => result.push({ shortcut: gs, isAlias: i > 0 }));
+  }
+  return result;
+}
+
 function handleAlias(shortcut: Shortcut): void {
   showTab('shortcuts');
   redirectUrlInput.value = shortcut.url;
@@ -135,7 +159,9 @@ function renderList(): void {
   listEl.hidden = isEmpty || noResults;
 
   const frag = document.createDocumentFragment();
-  filtered.forEach((s) => frag.appendChild(buildShortcutRow(s, refresh, handleAlias)));
+  groupShortcuts(filtered).forEach(({ shortcut, isAlias }) =>
+    frag.appendChild(buildShortcutRow(shortcut, refresh, handleAlias, isAlias))
+  );
   listEl.replaceChildren(frag);
 }
 
