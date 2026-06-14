@@ -661,8 +661,12 @@ smartSuggestionsToggle.addEventListener('change', async () => {
 
 // ── Export / Import ───────────────────────────────────────────────────────────
 exportBtn.addEventListener('click', async () => {
-  const store = await getStore();
-  const payload = { version: 1, shortcuts: Object.values(store.shortcuts), settings: store.settings };
+  const [store, localResult] = await Promise.all([
+    getStore(),
+    chrome.storage.local.get(DAILY_KEY),
+  ]);
+  const dailyCounts = (localResult[DAILY_KEY] ?? {}) as Record<string, number>;
+  const payload = { version: 1, shortcuts: Object.values(store.shortcuts), settings: store.settings, dailyCounts };
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
   a.download = 'omnijump.json';
@@ -674,7 +678,7 @@ importBtn.addEventListener('click', () => importFile.click());
 importFile.addEventListener('change', async () => {
   const file = importFile.files?.[0];
   if (!file) return;
-  let payload: { version?: number; shortcuts?: unknown[]; settings?: unknown };
+  let payload: { version?: number; shortcuts?: unknown[]; settings?: unknown; dailyCounts?: unknown };
   try {
     payload = JSON.parse(await file.text());
   } catch {
@@ -730,6 +734,16 @@ importFile.addEventListener('change', async () => {
       }
       failed++;
       console.error('Failed to import shortcut:', s, err);
+    }
+  }
+  if (payload.dailyCounts && typeof payload.dailyCounts === 'object' && !Array.isArray(payload.dailyCounts)) {
+    const raw = payload.dailyCounts as Record<string, unknown>;
+    const sanitized: Record<string, number> = {};
+    for (const [date, count] of Object.entries(raw)) {
+      if (typeof count === 'number' && /^\d{4}-\d{2}-\d{2}$/.test(date)) sanitized[date] = count;
+    }
+    if (Object.keys(sanitized).length > 0) {
+      try { await chrome.storage.local.set({ [DAILY_KEY]: sanitized }); } catch { /* non-fatal */ }
     }
   }
   await refresh();
