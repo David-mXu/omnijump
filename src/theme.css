@@ -15,10 +15,10 @@
   --border: #e6e6ee;
   --border-strong: #d3d3de;
 
-  /* ── Accent — electric indigo ────────────────────────────────────────── */
-  --accent: #5b3df5;
-  --accent-hover: #4a2fd6;
-  --accent-weak: #ece8ff;    /* chip / focus base */
+  /* ── Accent — cobalt blue ───────────────────────────────────────────── */
+  --accent: #1668C9;
+  --accent-hover: #0e52a8;
+  --accent-weak: #dceeff;    /* chip / focus base */
   --on-accent: #ffffff;
 
   /* ── Status ──────────────────────────────────────────────────────────── */
@@ -72,10 +72,10 @@ body.dark {
   --border: #2e2e33;
   --border-strong: #3d3d46;
 
-  --accent: #8b6dff;
-  --accent-hover: #9d84ff;
-  --accent-weak: #251f47;
-  --on-accent: #14131f;
+  --accent: #4da3ff;
+  --accent-hover: #63b0ff;
+  --accent-weak: #0a1e3d;
+  --on-accent: #051225;
 
   --danger: #e86b5f;
   --danger-weak: #2d1212;
@@ -85,8 +85,8 @@ body.dark {
   --key-border: #3f3f4a;
   --key-text: #e4e4ea;
 
-  --badge-bg: #261f4d;
-  --badge-fg: #b7a4ff;
+  --badge-bg: #0d1f3d;
+  --badge-fg: #6db3ff;
   --badge-search-bg: #133123;
   --badge-search-fg: #4fb87a;
 }
