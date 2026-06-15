@@ -5,451 +5,161 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OmniJump</title>
     <style>
-      *, *::before, *::after { box-sizing: border-box; }
-      body {
-        margin: 0 auto;
-        max-width: 760px;
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        font-size: 13px;
-        color: #222;
-        padding: 0 24px 40px;
-      }
+      /* Shared tokens & components live in theme.css (imported via options.ts).
+         Only options-page layout lives here. */
+      body { margin: 0 auto; max-width: 760px; padding: 0 var(--s6) 40px; }
 
       /* ── Page header ──────────────────────────────────────────────────────── */
       header {
-        padding: 24px 0 0;
-        margin-bottom: 20px;
+        display: flex; align-items: center; gap: var(--s3);
+        padding: var(--s6) 0 var(--s5);
       }
-      header h1 { font-size: 18px; font-weight: 700; margin: 0 0 2px; color: #111; }
-      header p { font-size: 12px; color: #999; margin: 0; }
+      .brand-mark { color: var(--accent); display: flex; }
+      header h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 1px; color: var(--text); }
+      header h1 b { color: var(--accent); }
+      header p { font-size: 12px; color: var(--text-3); margin: 0; }
 
-      /* ── Tabs ─────────────────────────────────────────────────────────────── */
+      /* ── Tabs / page container ────────────────────────────────────────────── */
       nav {
-        display: flex;
-        border-bottom: 1px solid #e0e0e0;
-        background: #fafafa;
-        border-radius: 6px 6px 0 0;
-        overflow: hidden;
+        display: flex; border-bottom: 1px solid var(--border);
+        background: var(--surface); border-radius: var(--r-md) var(--r-md) 0 0; overflow: hidden;
       }
       .tab {
-        flex: 1;
-        padding: 11px 8px;
-        border: none;
-        background: none;
-        cursor: pointer;
-        font-size: 13px;
-        color: #666;
-        border-bottom: 2px solid transparent;
+        flex: 1; padding: 11px 8px; border: none; background: none; cursor: pointer;
+        font-size: 13px; color: var(--text-2); border-bottom: 2px solid transparent;
+        transition: color var(--t), background var(--t), border-color var(--t);
       }
-      .tab.active {
-        color: #4c6ef5;
-        border-bottom-color: #4c6ef5;
-        font-weight: 600;
-      }
-      .tab:hover:not(.active) { color: #333; background: #f0f0f0; }
+      .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+      .tab:hover:not(.active) { color: var(--text); background: var(--surface-2); }
 
-      /* ── Layout ───────────────────────────────────────────────────────────── */
       section {
-        padding: 20px 0;
-        border-left: 1px solid #e8e8e8;
-        border-right: 1px solid #e8e8e8;
-        border-bottom: 1px solid #e8e8e8;
-        border-radius: 0 0 6px 6px;
-        padding: 20px 24px;
-      }
-
-      /* ── Inputs ───────────────────────────────────────────────────────────── */
-      input[type="text"],
-      input[type="url"],
-      input[type="number"] {
-        width: 100%;
-        padding: 7px 9px;
-        font-size: 13px;
-        border: 1px solid #d0d0d0;
-        border-radius: 4px;
-        outline: none;
-      }
-      input:focus {
-        border-color: #4c6ef5;
-        box-shadow: 0 0 0 2px rgba(76, 110, 245, 0.18);
-      }
-
-      /* ── Buttons ──────────────────────────────────────────────────────────── */
-      button { cursor: pointer; border-radius: 4px; font-size: 13px; }
-      .btn-primary {
-        background: #4c6ef5; color: white; border: none; padding: 7px 14px;
-      }
-      .btn-primary:hover { background: #3b5de0; }
-      .btn-secondary {
-        background: none; color: #555; border: 1px solid #d0d0d0; padding: 7px 12px;
-      }
-      .btn-secondary:hover { background: #f5f5f5; }
-      .btn-sm { padding: 5px 11px; font-size: 12px; }
-
-      /* ── Icon buttons (appear on row hover) ──────────────────────────────── */
-      .btn-icon {
-        background: none;
-        border: none;
-        padding: 4px 7px;
-        border-radius: 3px;
-        color: #bbb;
-        font-size: 15px;
-        line-height: 1;
-        opacity: 0;
-        transition: opacity 0.1s;
-        flex-shrink: 0;
-      }
-      li:hover .btn-icon { opacity: 1; }
-      li.editing .btn-icon { opacity: 0 !important; }
-      .btn-icon:hover { color: #555; background: #f0f0f0; }
-      .btn-icon.danger:hover { color: #c0392b; background: #fdecea; }
-
-      /* ── Shortcut list ────────────────────────────────────────────────────── */
-      #count { font-size: 12px; color: #888; }
-      ul { list-style: none; padding: 0; margin: 0; }
-      li { border-bottom: 1px solid #f0f0f0; }
-
-      .display-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 0;
-      }
-      .item { flex: 1; min-width: 0; }
-      .key {
-        font-family: monospace;
-        font-size: 13px;
-        font-weight: 600;
-        color: #222;
-      }
-      .badge {
-        display: inline-block;
-        font-size: 10px;
-        padding: 1px 5px;
-        border-radius: 10px;
-        background: #e8eeff;
-        color: #4c6ef5;
-        margin-left: 5px;
-        vertical-align: middle;
-        font-family: system-ui;
-      }
-      .badge-search { background: #e8f5e9; color: #2e7d32; }
-      .url {
-        color: #888;
-        font-size: 12px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        margin-top: 2px;
-      }
-
-      /* ── Stats (per-row usage) ───────────────────────────────────────────── */
-      .stats { font-size: 11px; color: #bbb; margin-top: 2px; }
-
-      /* ── Inline edit ──────────────────────────────────────────────────────── */
-      .edit-form {
-        display: none;
-        flex-direction: column;
-        gap: 6px;
-        padding: 10px 0;
-      }
-      li.editing .display-row { display: none; }
-      li.editing .edit-form { display: flex; }
-      .edit-actions { display: flex; gap: 6px; }
-      .edit-status { font-size: 11px; color: #c0392b; min-height: 14px; }
-
-      /* ── Empty state ──────────────────────────────────────────────────────── */
-      .empty-state {
-        text-align: center;
-        padding: 60px 0;
-        color: #bbb;
-        font-size: 13px;
-      }
-      .empty-state strong {
-        display: block;
-        color: #999;
-        margin-bottom: 6px;
-        font-size: 15px;
+        padding: var(--s5) var(--s6);
+        border: 1px solid var(--border); border-top: none;
+        border-radius: 0 0 var(--r-md) var(--r-md);
       }
 
       /* ── Add redirect bar ─────────────────────────────────────────────────── */
-      .add-redirect {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 16px;
-        flex-wrap: wrap;
-      }
+      .add-redirect { display: flex; gap: var(--s2); margin-bottom: var(--s4); flex-wrap: wrap; }
       .add-redirect input { flex: 1; min-width: 100px; }
-      #addRedirectStatus {
-        width: 100%;
-        font-size: 12px;
-        min-height: 16px;
-        color: #888;
-      }
-      #addRedirectStatus.error { color: #c0392b; }
-      #addRedirectStatus.success { color: #27ae60; }
-
-      /* ── Search shortcut toggle ──────────────────────────────────────────── */
-      .btn-link {
-        background: none; border: none; color: #4c6ef5; font-size: 12px;
-        padding: 2px 0; cursor: pointer; text-decoration: underline;
-      }
-      #searchFields { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
-      #searchFields small { font-size: 11px; color: #999; }
+      #redirectKey { font-family: var(--font-mono); }
+      .add-redirect .form-status { width: 100%; }
 
       /* ── Filter + list header ─────────────────────────────────────────────── */
-      #filterInput {
-        width: 100%;
-        margin-bottom: 10px;
-        padding: 6px 10px;
-        font-size: 13px;
-        border: 1px solid #d0d0d0;
-        border-radius: 4px;
-        outline: none;
-      }
-      #filterInput:focus { border-color: #4c6ef5; box-shadow: 0 0 0 2px rgba(76,110,245,0.18); }
-      .list-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 8px;
-      }
-      .list-actions { display: flex; gap: 8px; }
-
-      /* ── Multi-select ─────────────────────────────────────────────────────── */
-      .select-cb { display: none; accent-color: #4c6ef5; flex-shrink: 0; }
-      ul.selecting li { cursor: pointer; }
-      ul.selecting li .select-cb { display: inline-block; }
-      ul.selecting li .btn-icon { display: none !important; }
-      ul.selecting li.editing .edit-form { display: none; }
-      ul.selecting li.editing .display-row { display: flex; }
-      ul.selecting li:has(.select-cb:checked) { background: #f0f3ff; }
-
-      /* ── Keyboard focus ──────────────────────────────────────────────────── */
-      li:focus { outline: none; background: #f5f7ff; }
-      li:focus .btn-icon { opacity: 1; }
+      #filterInput { margin-bottom: var(--s3); }
+      .list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s2); gap: var(--s2); }
+      #count { font-size: 12px; color: var(--text-3); }
+      .list-actions { display: flex; gap: var(--s2); }
 
       /* ── Bundle form ──────────────────────────────────────────────────────── */
-      label {
-        display: block;
-        font-size: 13px;
-        margin-top: 14px;
-        margin-bottom: 4px;
-        color: #444;
-      }
-      #urlList { margin-top: 10px; }
-      .url-row { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
+      label { display: block; font-size: 13px; margin-top: var(--s4); margin-bottom: var(--s1); color: var(--text-2); }
+      .muted { color: var(--text-3); font-weight: 400; }
+      #urlList { margin-top: var(--s2); }
+      .url-row { display: flex; gap: var(--s2); margin-bottom: var(--s2); align-items: center; }
       .url-row input { flex: 1; }
-      .remove-url {
-        flex-shrink: 0;
-        padding: 5px 9px;
-        font-size: 15px;
-        line-height: 1;
-        background: none;
-        border: 1px solid #d0d0d0;
-        border-radius: 4px;
-        color: #aaa;
-      }
-      .remove-url:hover { color: #c0392b; background: #fdecea; border-color: #f5a9a9; }
-      #addUrl {
-        margin-top: 4px;
-        width: 100%;
-        padding: 7px;
-        font-size: 13px;
-        background: none;
-        border: 1px dashed #ccc;
-        border-radius: 4px;
-        color: #777;
-      }
-      #addUrl:hover { border-color: #4c6ef5; color: #4c6ef5; background: #f5f7ff; }
-      #saveBundle { margin-top: 16px; width: 100%; padding: 9px; font-size: 14px; }
-      #bundleStatus { margin-top: 8px; font-size: 12px; min-height: 16px; color: #888; }
-      #bundleStatus.error { color: #c0392b; }
-      #bundleStatus.success { color: #27ae60; }
-
-      /* ── Drag to reorder bundle URLs ──────────────────────────────────────── */
       .url-row[draggable="true"] { cursor: grab; }
       .url-row.dragging { opacity: 0.4; }
+      .remove-url {
+        flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+        padding: 7px; line-height: 0; background: none; border: 1px solid var(--border-strong);
+        border-radius: var(--r-sm); color: var(--text-3);
+      }
+      .remove-url svg { width: 15px; height: 15px; }
+      .remove-url:hover { color: var(--danger); background: var(--danger-weak); border-color: var(--danger); }
+      #addUrl {
+        margin-top: var(--s1); width: 100%; display: inline-flex; align-items: center;
+        justify-content: center; gap: 6px; padding: 8px; font-size: 13px;
+        background: none; border: 1px dashed var(--border-strong); border-radius: var(--r-sm); color: var(--text-2);
+      }
+      #addUrl svg { width: 15px; height: 15px; }
+      #addUrl:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-weak); }
+      #saveBundle { margin-top: var(--s4); width: 100%; padding: 10px; font-size: 14px; }
+      #bundleStatus { margin-top: var(--s2); }
+      .bundle-tab-btns { display: flex; gap: var(--s2); margin-bottom: var(--s2); }
+      .bundle-tab-btns button { flex: 1; padding: 7px 8px; font-size: 12px; }
 
-      /* ── Bundle tab buttons ───────────────────────────────────────────────── */
-      .bundle-tab-btns { display: flex; gap: 6px; margin-bottom: 8px; }
-      .bundle-tab-btns button { flex: 1; padding: 6px 8px; font-size: 12px; }
-
-      /* ── Tab picker ───────────────────────────────────────────────────────── */
+      /* ── Pickers ──────────────────────────────────────────────────────────── */
       #tabPicker, #shortcutPicker, #redirectTabPicker {
-        border: 1px solid #e0e0e0;
-        border-radius: 4px;
-        margin-bottom: 8px;
-        background: #fafafa;
+        border: 1px solid var(--border); border-radius: var(--r-sm);
+        margin-bottom: var(--s2); background: var(--surface);
       }
       #redirectTabPicker { width: 100%; }
-      #tabPickList, #shortcutPickList, #redirectTabPickList { max-height: 200px; overflow-y: auto; padding: 4px 8px; }
+      #tabPickList, #shortcutPickList, #redirectTabPickList { max-height: 200px; overflow-y: auto; padding: var(--s1) var(--s2); }
       .tab-pick-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 6px 0;
-        cursor: pointer;
-        font-size: 12px;
-        color: #444;
-        border-bottom: 1px solid #f5f5f5;
+        display: flex; align-items: center; gap: var(--s2); padding: 6px 0;
+        cursor: pointer; font-size: 12px; color: var(--text-2); border-bottom: 1px solid var(--border);
       }
       .tab-pick-row:last-child { border-bottom: none; }
       .tab-favicon { flex-shrink: 0; border-radius: 2px; }
       .tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .tab-pick-actions {
-        display: flex; gap: 6px; padding: 6px 8px;
-        border-top: 1px solid #e0e0e0;
-      }
+      .tab-pick-actions { display: flex; gap: var(--s2); padding: 6px var(--s2); border-top: 1px solid var(--border); }
       .shortcut-pick-item { flex: 1; min-width: 0; }
-      .shortcut-pick-key { font-family: monospace; font-weight: 600; font-size: 12px; color: #222; }
-      .shortcut-pick-url { font-size: 11px; color: #999; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .picker-empty { padding: 12px 8px; font-size: 12px; color: #aaa; text-align: center; }
+      .shortcut-pick-key { font-family: var(--font-mono); font-weight: 600; font-size: 12px; color: var(--text); }
+      .shortcut-pick-url { font-size: 11px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .picker-empty { padding: var(--s3) var(--s2); font-size: 12px; color: var(--text-3); text-align: center; }
 
-      /* ── TIP suggestion banner ───────────────────────────────────────────── */
+      /* ── TIP suggestion banner ────────────────────────────────────────────── */
       #suggestion {
-        background: #f0f3ff;
-        border-left: 3px solid #4c6ef5;
-        border-radius: 4px;
-        padding: 10px 12px;
-        margin-bottom: 12px;
-        font-size: 13px;
-        color: #333;
+        background: var(--accent-weak); border-left: 3px solid var(--accent);
+        border-radius: var(--r-sm); padding: var(--s3); margin-bottom: var(--s3);
+        font-size: 13px; color: var(--text);
       }
-      #suggestionActions { display: flex; gap: 8px; margin-top: 8px; }
+      #suggestionActions { display: flex; gap: var(--s2); margin-top: var(--s2); }
 
-      /* ── Settings ─────────────────────────────────────────────────────────── */
-      h2 { font-size: 14px; font-weight: 600; margin: 24px 0 10px; color: #333; border-bottom: 1px solid #f0f0f0; padding-bottom: 6px; }
-      h2:first-child { margin-top: 0; }
-      .shortcut-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 7px 0;
-        border-bottom: 1px solid #f0f0f0;
-        font-size: 13px;
+      /* ── Search shortcut toggle ───────────────────────────────────────────── */
+      #searchFields { margin-top: var(--s2); display: flex; flex-direction: column; gap: var(--s2); }
+      #searchFields small { font-size: 11px; color: var(--text-3); }
+
+      /* ── Settings — grouped cards ─────────────────────────────────────────── */
+      .card {
+        border: 1px solid var(--border); border-radius: var(--r-md);
+        padding: var(--s4) var(--s5); margin-bottom: var(--s4); background: var(--bg);
       }
-      .shortcut-label { color: #555; }
+      h2 { font-size: 12px; font-weight: 600; margin: 0 0 var(--s3); color: var(--text); text-transform: uppercase; letter-spacing: 0.04em; }
+      .shortcut-row {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+      }
+      .shortcut-row:last-of-type { border-bottom: none; }
+      .shortcut-label { color: var(--text-2); }
       .shortcut-key {
-        font-family: monospace;
-        background: #f3f4f6;
-        padding: 2px 8px;
-        border-radius: 3px;
-        font-size: 12px;
-        color: #333;
+        font-family: var(--font-mono); background: var(--key-bg); border: 1px solid var(--key-border);
+        padding: 2px 8px; border-radius: var(--r-sm); font-size: 12px; color: var(--key-text);
       }
       #customizeShortcut {
-        margin-top: 10px;
-        font-size: 12px;
-        padding: 6px 12px;
-        background: none;
-        border: 1px solid #d0d0d0;
-        color: #4c6ef5;
+        margin-top: var(--s2); display: inline-flex; align-items: center; gap: 6px;
+        font-size: 12px; padding: 7px 12px; background: none; border: 1px solid var(--border-strong); color: var(--accent);
       }
-      #customizeShortcut:hover { background: #f5f7ff; }
-      .settings-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+      #customizeShortcut svg { width: 14px; height: 14px; }
+      #customizeShortcut:hover { background: var(--accent-weak); }
+      #firefoxShortcutHint { font-size: 12px; color: var(--text-3); line-height: 1.5; }
+      .settings-row { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s2); }
       #maxShortcutsInput, #filterThresholdInput { width: 90px; }
-      #settingsStatus, #filterThresholdStatus, #staleStatus {
-        font-size: 12px; margin-top: 8px; min-height: 16px; color: #888;
-      }
-      #settingsStatus.error, #filterThresholdStatus.error, #staleStatus.error { color: #c0392b; }
-      #settingsStatus.success, #filterThresholdStatus.success, #staleStatus.success { color: #27ae60; }
+      .form-status { margin-top: var(--s2); font-size: 12px; }
 
-      /* ── Weekly usage chart ──────────────────────────────────────────────── */
-      #weeklyChart {
-        display: flex; align-items: flex-end; gap: 4px;
-        height: 52px; margin-top: 10px;
-      }
-      .week-bar { flex: 1; background: #4c6ef5; border-radius: 2px; min-height: 2px; }
-      #weekTotal { font-size: 12px; color: #888; margin-top: 6px; }
-
-      /* ── Dark mode ────────────────────────────────────────────────────────── */
-      body.dark { background: #1a1a1b; color: #e0e0e0; }
-      body.dark header h1 { color: #e0e0e0; }
-      body.dark header p { color: #666; }
-      body.dark nav { background: #242424; border-bottom-color: #333; }
-      body.dark .tab { color: #999; }
-      body.dark .tab.active { color: #7b9eff; border-bottom-color: #7b9eff; }
-      body.dark .tab:hover:not(.active) { color: #ccc; background: #333; }
-      body.dark section {
-        border-color: #2a2a2a;
-      }
-      body.dark input[type="text"],
-      body.dark input[type="url"],
-      body.dark input[type="number"],
-      body.dark input[type="search"] {
-        background: #2a2a2a;
-        border-color: #3d3d3d;
-        color: #e0e0e0;
-      }
-      body.dark input[type="text"]::placeholder,
-      body.dark input[type="url"]::placeholder,
-      body.dark input[type="search"]::placeholder { color: #555; }
-      body.dark input:focus {
-        border-color: #7b9eff;
-        box-shadow: 0 0 0 2px rgba(123,158,255,0.18);
-      }
-      body.dark .btn-secondary { color: #aaa; border-color: #444; }
-      body.dark .btn-secondary:hover { background: #2a2a2a; }
-      body.dark .btn-link { color: #7b9eff; }
-      body.dark .btn-icon { color: #555; }
-      body.dark .btn-icon:hover { color: #aaa; background: #333; }
-      body.dark .btn-icon.danger:hover { color: #e05050; background: #2d1212; }
-      body.dark li { border-bottom-color: #2a2a2a; }
-      body.dark .key { color: #e0e0e0; }
-      body.dark .badge { background: #1e2a5e; color: #7b9eff; }
-      body.dark .badge-search { background: #1a3325; color: #4caf50; }
-      body.dark .url { color: #666; }
-      body.dark .stats { color: #444; }
-      body.dark .edit-status { color: #e05050; }
-      body.dark .empty-state { color: #555; }
-      body.dark .empty-state strong { color: #666; }
-      body.dark li:focus { background: #1e2540; }
-      body.dark ul.selecting li:has(.select-cb:checked) { background: #1e2540; }
-      body.dark #addRedirectStatus { color: #666; }
-      body.dark #addRedirectStatus.error { color: #e05050; }
-      body.dark #addRedirectStatus.success { color: #2ecc71; }
-      body.dark #filterInput { background: #2a2a2a; border-color: #3d3d3d; color: #e0e0e0; }
-      body.dark #filterInput:focus { border-color: #7b9eff; }
-      body.dark label { color: #aaa; }
-      body.dark .remove-url { border-color: #3d3d3d; color: #666; }
-      body.dark .remove-url:hover { color: #e05050; background: #2d1212; border-color: #5a2020; }
-      body.dark #addUrl { border-color: #444; color: #666; }
-      body.dark #addUrl:hover { border-color: #7b9eff; color: #7b9eff; background: #1e2540; }
-      body.dark #bundleStatus { color: #666; }
-      body.dark #bundleStatus.error { color: #e05050; }
-      body.dark #bundleStatus.success { color: #2ecc71; }
-      body.dark #suggestion { background: #1e2540; border-left-color: #7b9eff; color: #ccc; }
-      body.dark #tabPicker, body.dark #shortcutPicker,
-      body.dark #redirectTabPicker { border-color: #333; background: #242424; }
-      body.dark .tab-pick-row { color: #aaa; border-bottom-color: #2a2a2a; }
-      body.dark .tab-pick-actions { border-top-color: #333; }
-      body.dark .shortcut-pick-key { color: #e0e0e0; }
-      body.dark .shortcut-pick-url { color: #666; }
-      body.dark .picker-empty { color: #555; }
-      body.dark h2 { color: #ccc; border-bottom-color: #2a2a2a; }
-      body.dark .shortcut-label { color: #888; }
-      body.dark .shortcut-key { background: #2a2a2a; color: #ccc; }
-      body.dark .shortcut-row { border-bottom-color: #2a2a2a; }
-      body.dark #customizeShortcut { border-color: #444; color: #7b9eff; }
-      body.dark #customizeShortcut:hover { background: #1e2540; }
-      body.dark #settingsStatus, body.dark #filterThresholdStatus, body.dark #staleStatus { color: #666; }
-      body.dark #settingsStatus.error, body.dark #filterThresholdStatus.error, body.dark #staleStatus.error { color: #e05050; }
-      body.dark #settingsStatus.success, body.dark #filterThresholdStatus.success, body.dark #staleStatus.success { color: #2ecc71; }
-      body.dark #weekTotal { color: #666; }
-      body.dark #searchFields small { color: #666; }
-      body.dark #dataStatus { color: #666; }
+      /* ── Weekly usage chart ───────────────────────────────────────────────── */
+      #weeklyChart { display: flex; align-items: flex-end; gap: var(--s1); height: 52px; margin-top: var(--s2); }
+      .week-bar { flex: 1; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 2px; }
+      #weekTotal { font-size: 12px; color: var(--text-3); margin-top: var(--s1); font-variant-numeric: tabular-nums; }
     </style>
   </head>
   <body>
     <header>
-      <h1>OmniJump</h1>
-      <p>Manage your address-bar shortcuts, bundles, and settings.</p>
+      <span class="brand-mark" aria-hidden="true">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="3" width="18" height="18" rx="5" fill="currentColor"/>
+          <path d="M9 15 15 9M15 9H10M15 9v5" stroke="#fff" stroke-width="1.8"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <div>
+        <h1>Omni<b>Jump</b></h1>
+        <p>Manage your address-bar shortcuts, bundles, and settings.</p>
+      </div>
     </header>
 
     <nav>
       <button id="tabShortcuts" class="tab active">Shortcuts</button>
-      <button id="tabBundle" class="tab">New Bundle</button>
+      <button id="tabBundle" class="tab">New bundle</button>
       <button id="tabSettings" class="tab">Settings</button>
     </nav>
 
@@ -472,9 +182,9 @@
             <button type="button" id="cancelRedirectPicker" class="btn-secondary btn-sm">Cancel</button>
           </div>
         </div>
-        <button type="button" id="saveRedirect" class="btn-primary">+ Add</button>
-        <div id="addRedirectStatus"></div>
-        <button type="button" id="searchToggle" class="btn-link">+ Make search shortcut</button>
+        <button type="button" id="saveRedirect" class="btn-primary">Add</button>
+        <div id="addRedirectStatus" class="form-status"></div>
+        <button type="button" id="searchToggle" class="btn-link">Make search shortcut</button>
         <div id="searchFields" hidden>
           <input id="redirectUrlTemplate" type="text" placeholder="https://site.com/search?q=%s" />
           <small>Use %s where the query goes. The URL above is the fallback when no query is typed.</small>
@@ -490,9 +200,9 @@
       </div>
       <div id="emptyState" class="empty-state" hidden>
         <strong>No shortcuts yet</strong>
-        Type a keyword and URL above to add your first redirect.
+        Type a keyword and a URL above to make your first jump.
       </div>
-      <div id="noResults" class="empty-state" hidden>No shortcuts match your filter.</div>
+      <div id="noResults" class="empty-state" hidden>Nothing matches your filter.</div>
       <ul id="shortcutList"></ul>
     </section>
 
@@ -502,10 +212,10 @@
         <label for="bundleKey">Keyword</label>
         <input id="bundleKey" type="text" autocomplete="off" placeholder="e.g. work" />
 
-        <label for="bundleLabel">Label <span style="color:#bbb;font-weight:400">(optional)</span></label>
+        <label for="bundleLabel">Label <span class="muted">(optional)</span></label>
         <input id="bundleLabel" type="text" placeholder="e.g. Work tabs" />
 
-        <label>URLs <span style="color:#bbb;font-size:12px;font-weight:400">(at least 2)</span></label>
+        <label>URLs <span class="muted">(at least 2)</span></label>
         <div class="bundle-tab-btns">
           <button type="button" id="addAllTabs" class="btn-secondary">Add all open tabs</button>
           <button type="button" id="pickTabs" class="btn-secondary">Pick tabs…</button>
@@ -527,78 +237,100 @@
         </div>
         <div id="urlList"></div>
 
-        <button type="button" id="addUrl">+ Add URL</button>
-        <button type="submit" id="saveBundle" class="btn-primary">Save Bundle</button>
-        <div id="bundleStatus" role="status"></div>
+        <button type="button" id="addUrl">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+               stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          Add URL
+        </button>
+        <button type="submit" id="saveBundle" class="btn-primary">Save bundle</button>
+        <div id="bundleStatus" class="form-status" role="status"></div>
       </form>
     </section>
 
     <!-- Settings panel -->
     <section id="panelSettings" hidden>
-      <h2>Appearance</h2>
-      <div class="settings-row">
-        <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer">
-          <input type="checkbox" id="darkModeToggle"> Dark mode
-        </label>
-      </div>
-      <div class="settings-row" style="margin-top:4px">
-        <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer">
-          <input type="checkbox" id="smartSuggestionsToggle"> Smart suggestions
-        </label>
+      <div class="card">
+        <h2>Appearance</h2>
+        <div class="settings-row">
+          <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer">
+            <input type="checkbox" id="darkModeToggle"> Dark mode
+          </label>
+        </div>
+        <div class="settings-row" style="margin-top:4px">
+          <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer">
+            <input type="checkbox" id="smartSuggestionsToggle"> Smart suggestions
+          </label>
+        </div>
       </div>
 
-      <h2>Keyboard Shortcuts</h2>
-      <div class="shortcut-row">
-        <span class="shortcut-label">Open popup</span>
-        <span id="shortcutPopup" class="shortcut-key">—</span>
+      <div class="card">
+        <h2>Keyboard shortcuts</h2>
+        <div class="shortcut-row">
+          <span class="shortcut-label">Open popup</span>
+          <span id="shortcutPopup" class="shortcut-key">—</span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-label">Open side panel</span>
+          <span id="shortcutPanel" class="shortcut-key">—</span>
+        </div>
+        <button type="button" id="customizeShortcut">
+          Customize shortcuts
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+        </button>
+        <p id="firefoxShortcutHint" hidden>To change shortcuts: <strong>about:addons</strong> → gear icon → <strong>Manage Extension Shortcuts</strong></p>
       </div>
-      <div class="shortcut-row">
-        <span class="shortcut-label">Open side panel</span>
-        <span id="shortcutPanel" class="shortcut-key">—</span>
-      </div>
-      <button type="button" id="customizeShortcut">Customize shortcuts ↗</button>
-      <p id="firefoxShortcutHint" hidden>To change shortcuts: <strong>about:addons</strong> → ⚙ gear icon → <strong>Manage Extension Shortcuts</strong></p>
 
-      <h2>Shortcut Limit</h2>
-      <label for="maxShortcutsInput">Max shortcuts (1–500)</label>
-      <div class="settings-row">
-        <input id="maxShortcutsInput" type="number" min="1" max="500" step="1" />
-        <button type="button" id="saveMaxShortcuts" class="btn-primary btn-sm">Save</button>
+      <div class="card">
+        <h2>Shortcut limit</h2>
+        <label for="maxShortcutsInput">Max shortcuts (1–500)</label>
+        <div class="settings-row">
+          <input id="maxShortcutsInput" type="number" min="1" max="500" step="1" />
+          <button type="button" id="saveMaxShortcuts" class="btn-primary btn-sm">Save</button>
+        </div>
+        <div id="settingsStatus" class="form-status" role="status"></div>
       </div>
-      <div id="settingsStatus" role="status"></div>
 
-      <h2>Search Filter</h2>
-      <label for="filterThresholdInput">Show filter bar when shortcuts exceed</label>
-      <div class="settings-row">
-        <input id="filterThresholdInput" type="number" min="1" max="500" step="1" />
-        <button type="button" id="saveFilterThreshold" class="btn-primary btn-sm">Save</button>
+      <div class="card">
+        <h2>Search filter</h2>
+        <label for="filterThresholdInput">Show filter bar when shortcuts exceed</label>
+        <div class="settings-row">
+          <input id="filterThresholdInput" type="number" min="1" max="500" step="1" />
+          <button type="button" id="saveFilterThreshold" class="btn-primary btn-sm">Save</button>
+        </div>
+        <div id="filterThresholdStatus" class="form-status" role="status"></div>
       </div>
-      <div id="filterThresholdStatus" role="status"></div>
 
-      <h2>This Week</h2>
-      <div id="weeklyChart"></div>
-      <div id="weekTotal"></div>
-      <button type="button" id="clearStatsBtn" class="btn-secondary btn-sm" style="margin-top:8px">Clear stats</button>
-      <div id="clearStatsStatus" style="font-size:12px;margin-top:4px;min-height:14px;color:#888;"></div>
-
-      <h2>Data</h2>
-      <div class="settings-row">
-        <button type="button" id="exportBtn" class="btn-secondary btn-sm">Export shortcuts</button>
-        <button type="button" id="importBtn" class="btn-secondary btn-sm">Import shortcuts</button>
-        <input type="file" id="importFile" accept=".json" hidden>
+      <div class="card">
+        <h2>This week</h2>
+        <div id="weeklyChart"></div>
+        <div id="weekTotal"></div>
+        <button type="button" id="clearStatsBtn" class="btn-secondary btn-sm" style="margin-top:8px">Clear stats</button>
+        <div id="clearStatsStatus" class="form-status"></div>
       </div>
-      <div id="dataStatus" style="font-size:12px;margin-top:6px;min-height:14px;color:#888;"></div>
 
-      <h2>Auto-Delete Stale Shortcuts</h2>
-      <div class="settings-row" style="flex-wrap:wrap;gap:6px">
-        <label style="display:flex;align-items:center;gap:6px;flex:1 1 100%">
-          <input type="checkbox" id="staleToggle"> Delete shortcuts unused for
-          <input id="staleDaysInput" type="number" min="7" max="365" step="1" style="width:70px">
-          days
-        </label>
+      <div class="card">
+        <h2>Data</h2>
+        <div class="settings-row">
+          <button type="button" id="exportBtn" class="btn-secondary btn-sm">Export shortcuts</button>
+          <button type="button" id="importBtn" class="btn-secondary btn-sm">Import shortcuts</button>
+          <input type="file" id="importFile" accept=".json" hidden>
+        </div>
+        <div id="dataStatus" class="form-status"></div>
       </div>
-      <button type="button" id="saveStale" class="btn-primary btn-sm" style="margin-top:8px">Save</button>
-      <div id="staleStatus" role="status"></div>
+
+      <div class="card">
+        <h2>Auto-delete stale shortcuts</h2>
+        <div class="settings-row" style="flex-wrap:wrap;gap:6px">
+          <label style="display:flex;align-items:center;gap:6px;flex:1 1 100%">
+            <input type="checkbox" id="staleToggle"> Delete shortcuts unused for
+            <input id="staleDaysInput" type="number" min="7" max="365" step="1" style="width:70px">
+            days
+          </label>
+        </div>
+        <button type="button" id="saveStale" class="btn-primary btn-sm" style="margin-top:8px">Save</button>
+        <div id="staleStatus" class="form-status" role="status"></div>
+      </div>
     </section>
 
     <script type="module" src="./options.ts"></script>

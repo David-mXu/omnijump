@@ -1,3 +1,4 @@
+import './theme.css';
 import { IS_FIREFOX, openSidePanel } from './platform';
 import { addDismissedHost, getStore, normalizeKey, upsertShortcut } from './storage';
 import { suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';

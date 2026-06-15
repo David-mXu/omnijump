@@ -1,0 +1,358 @@
+/* ============================================================================
+   OmniJump — shared theme. "Keyboard-native" identity.
+   Single source of truth for tokens + shared components across popup,
+   sidepanel, and options. Dark mode is a token reassignment under `body.dark`.
+   ============================================================================ */
+
+:root {
+  /* ── Surfaces & text ─────────────────────────────────────────────────── */
+  --bg: #ffffff;
+  --surface: #f7f7fa;        /* nav, pickers */
+  --surface-2: #f0f0f5;      /* subtle fills */
+  --text: #1a1a22;           /* primary  (~16:1) */
+  --text-2: #54545f;         /* secondary (~6:1)  */
+  --text-3: #6b6b78;         /* tertiary / stats (~4.7:1) */
+  --border: #e6e6ee;
+  --border-strong: #d3d3de;
+
+  /* ── Accent — electric indigo ────────────────────────────────────────── */
+  --accent: #5b3df5;
+  --accent-hover: #4a2fd6;
+  --accent-weak: #ece8ff;    /* chip / focus base */
+  --on-accent: #ffffff;
+
+  /* ── Status ──────────────────────────────────────────────────────────── */
+  --danger: #c0392b;
+  --danger-weak: #fdecea;
+  --success: #1e8e4e;
+
+  /* ── Keycap (signature element) ──────────────────────────────────────── */
+  --key-bg: #f4f4f9;
+  --key-border: #d6d6e2;
+  --key-text: #2a2a38;
+
+  /* ── Badges ──────────────────────────────────────────────────────────── */
+  --badge-bg: var(--accent-weak);
+  --badge-fg: var(--accent);
+  --badge-search-bg: #e3f6ea;
+  --badge-search-fg: #15803d;
+
+  /* ── Focus ring ──────────────────────────────────────────────────────── */
+  --ring: 0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent);
+
+  /* ── Spacing scale (4px rhythm) ──────────────────────────────────────── */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 20px;
+  --s6: 24px;
+
+  /* ── Radius ──────────────────────────────────────────────────────────── */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+
+  /* ── Type ────────────────────────────────────────────────────────────── */
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+
+  /* ── Motion ──────────────────────────────────────────────────────────── */
+  --t-fast: 120ms ease;
+  --t: 150ms ease;
+}
+
+body.dark {
+  --bg: #1a1a1b;
+  --surface: #242427;
+  --surface-2: #2c2c30;
+  --text: #e8e8ea;
+  --text-2: #b2b2bc;
+  --text-3: #8c8c97;
+  --border: #2e2e33;
+  --border-strong: #3d3d46;
+
+  --accent: #8b6dff;
+  --accent-hover: #9d84ff;
+  --accent-weak: #251f47;
+  --on-accent: #14131f;
+
+  --danger: #e86b5f;
+  --danger-weak: #2d1212;
+  --success: #4cc77f;
+
+  --key-bg: #2c2c32;
+  --key-border: #3f3f4a;
+  --key-text: #e4e4ea;
+
+  --badge-bg: #261f4d;
+  --badge-fg: #b7a4ff;
+  --badge-search-bg: #133123;
+  --badge-search-fg: #4fb87a;
+}
+
+/* ── Reset & base ──────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+/* ── Inputs ────────────────────────────────────────────────────────────── */
+input[type="text"],
+input[type="url"],
+input[type="number"],
+input[type="search"] {
+  width: 100%;
+  padding: 7px 9px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  outline: none;
+  transition: border-color var(--t), box-shadow var(--t);
+}
+input::placeholder { color: var(--text-3); }
+input:focus-visible,
+input:focus {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+button {
+  cursor: pointer;
+  font-family: inherit;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  transition: background var(--t), color var(--t), border-color var(--t),
+    transform var(--t-fast), box-shadow var(--t);
+}
+button:focus-visible { outline: none; box-shadow: var(--ring); }
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+  padding: 7px 14px;
+  font-weight: 500;
+}
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:active { transform: scale(0.97); }
+
+.btn-secondary {
+  background: var(--bg);
+  color: var(--text-2);
+  border: 1px solid var(--border-strong);
+  padding: 7px 12px;
+}
+.btn-secondary:hover { background: var(--surface-2); color: var(--text); }
+.btn-secondary:active { transform: scale(0.97); }
+
+.btn-sm { padding: 5px 11px; font-size: 12px; }
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  padding: 2px 2px;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+.btn-link:hover { text-decoration: underline; }
+
+/* ── Icon buttons (reveal on row hover/focus) ──────────────────────────── */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 5px;
+  border-radius: var(--r-sm);
+  color: var(--text-3);
+  line-height: 0;
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity var(--t), background var(--t), color var(--t);
+}
+li:hover .btn-icon,
+li:focus .btn-icon,
+li:focus-within .btn-icon { opacity: 1; }
+li.editing .btn-icon { opacity: 0 !important; }
+.btn-icon:hover { color: var(--text); background: var(--surface-2); }
+.btn-icon:focus-visible { opacity: 1; }
+.btn-icon.danger:hover { color: var(--danger); background: var(--danger-weak); }
+.btn-icon svg { width: 15px; height: 15px; }
+
+/* ── Keycap — the signature element ────────────────────────────────────── */
+.key {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--key-text);
+  background: var(--key-bg);
+  border: 1px solid var(--key-border);
+  border-bottom-width: 2px;
+  border-radius: var(--r-sm);
+  padding: 3px 8px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+/* ── Badges ────────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--badge-bg);
+  color: var(--badge-fg);
+  margin-left: var(--s1);
+  vertical-align: middle;
+  font-family: var(--font-ui);
+}
+.badge-search { background: var(--badge-search-bg); color: var(--badge-search-fg); }
+
+/* ── Shortcut row ──────────────────────────────────────────────────────── */
+ul { list-style: none; padding: 0; margin: 0; }
+li {
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  transition: background var(--t);
+}
+li:hover { background: var(--surface); }
+
+.display-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s1);
+}
+.item { flex: 1; min-width: 0; }
+.primary {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.url {
+  color: var(--text-3);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+.stats {
+  font-size: 10px;
+  color: var(--text-3);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Alias rows: indented under their parent with an accent rail. */
+li.alias-row { position: relative; }
+li.alias-row::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 0;
+  bottom: 0;
+  border-left: 2px solid var(--accent-weak);
+}
+li.alias-row .display-row { padding-left: 18px; }
+li.alias-row .url { display: none; }
+
+/* ── Inline edit ───────────────────────────────────────────────────────── */
+.edit-form {
+  display: none;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s2) var(--s1);
+}
+li.editing .display-row { display: none; }
+li.editing .edit-form { display: flex; }
+.edit-actions { display: flex; gap: var(--s2); }
+.edit-status { font-size: 11px; color: var(--danger); min-height: 14px; }
+
+/* ── Multi-select ──────────────────────────────────────────────────────── */
+.select-cb { display: none; accent-color: var(--accent); flex-shrink: 0; }
+ul.selecting li { cursor: pointer; }
+ul.selecting li .select-cb { display: inline-block; }
+ul.selecting li .btn-icon { display: none !important; }
+ul.selecting li.editing .edit-form { display: none; }
+ul.selecting li.editing .display-row { display: flex; }
+ul.selecting li:has(.select-cb:checked) { background: var(--accent-weak); }
+
+/* ── Keyboard focus on rows ────────────────────────────────────────────── */
+li:focus { outline: none; background: var(--surface); box-shadow: inset 2px 0 0 var(--accent); }
+
+/* ── Empty state ───────────────────────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: var(--s6) var(--s4);
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.empty-state strong {
+  display: block;
+  color: var(--text-2);
+  margin-bottom: var(--s1);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ── URL ancestor chips ────────────────────────────────────────────────── */
+.url-ancestors { display: flex; flex-wrap: wrap; gap: var(--s1); margin-top: var(--s1); }
+.url-ancestors:empty { display: none; }
+.url-ancestor-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.url-ancestor-btn:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+
+/* ── Status text (forms) ───────────────────────────────────────────────── */
+/* `.form-status` reserves space + sets the neutral color; the standalone
+   `.error`/`.success` rules keep status colors correct even where the JS
+   replaces className wholesale (e.g. `el.className = 'error'`). */
+.form-status { font-size: 11px; min-height: 14px; color: var(--text-3); }
+.error { color: var(--danger); }
+.success { color: var(--success); }
+
+/* ── Reduced motion ────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

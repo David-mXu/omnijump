@@ -1,3 +1,5 @@
+import './theme.css';
+import { icon } from './icons';
 import { IS_FIREFOX } from './platform';
 import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, clearAllStats, deleteShortcut, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
 import { buildShortcutRow, normalizeUrl } from './ui';
@@ -179,14 +181,14 @@ deleteSelectedBtn.addEventListener('click', async () => {
 // ── Add Redirect form ─────────────────────────────────────────────────────────
 function setRedirectStatus(msg: string, type: 'error' | 'success' | '' = ''): void {
   addRedirectStatusEl.textContent = msg;
-  addRedirectStatusEl.className = type;
+  addRedirectStatusEl.className = type ? `form-status ${type}` : 'form-status';
 }
 
 let isSearchType = false;
 searchToggleBtn.addEventListener('click', () => {
   isSearchType = !isSearchType;
   searchFieldsEl.hidden = !isSearchType;
-  searchToggleBtn.textContent = isSearchType ? '− Remove search shortcut' : '+ Make search shortcut';
+  searchToggleBtn.textContent = isSearchType ? 'Remove search shortcut' : 'Make search shortcut';
 });
 
 saveRedirectBtn.addEventListener('click', async () => {
@@ -209,7 +211,7 @@ saveRedirectBtn.addEventListener('click', async () => {
       redirectUrlTemplateInput.value = '';
       isSearchType = false;
       searchFieldsEl.hidden = true;
-      searchToggleBtn.textContent = '+ Make search shortcut';
+      searchToggleBtn.textContent = 'Make search shortcut';
       await refresh();
     } catch (err) {
       setRedirectStatus((err as Error).message, 'error');
@@ -268,7 +270,8 @@ function addUrlRow(value = ''): void {
   removeBtn.type = 'button';
   removeBtn.className = 'remove-url';
   removeBtn.title = 'Remove';
-  removeBtn.textContent = '×';
+  removeBtn.setAttribute('aria-label', 'Remove URL');
+  removeBtn.innerHTML = icon('close');
   removeBtn.addEventListener('click', () => row.remove());
 
   row.addEventListener('dragstart', () => row.classList.add('dragging'));
@@ -443,7 +446,7 @@ useSelectedShortcutsBtn.addEventListener('click', () => {
 
 function setBundleStatus(msg: string, type: 'error' | 'success' | '' = ''): void {
   bundleStatusEl.textContent = msg;
-  bundleStatusEl.className = type;
+  bundleStatusEl.className = type ? `form-status ${type}` : 'form-status';
 }
 
 bundleForm.addEventListener('submit', async (event) => {

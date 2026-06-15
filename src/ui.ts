@@ -1,4 +1,5 @@
 import { deleteShortcut, normalizeKey, renameShortcut, upsertShortcut } from './storage';
+import { icon } from './icons';
 import { Shortcut } from './types';
 
 export let hoveredRow: HTMLLIElement | null = null;
@@ -83,32 +84,49 @@ export function buildShortcutRow(
   const displayRow = document.createElement('div');
   displayRow.className = 'display-row';
 
+  // Keycap — the keyword you type. The signature element.
+  const keycap = document.createElement('span');
+  keycap.className = 'key';
+  keycap.textContent = shortcut.key;
+
   const item = document.createElement('div');
   item.className = 'item';
 
-  const keyLine = document.createElement('div');
-  keyLine.className = 'key';
-  keyLine.textContent = shortcut.label ?? shortcut.key;
+  // Primary line: label, else the destination's identity.
+  const primary = document.createElement('div');
+  primary.className = 'primary';
+  if (shortcut.label) {
+    primary.textContent = shortcut.label;
+  } else if (shortcut.type === 'bundle') {
+    const n = shortcut.bundleUrls?.length ?? 0;
+    primary.textContent = `${n} ${n === 1 ? 'tab' : 'tabs'}`;
+  } else {
+    primary.textContent = displayUrl(shortcut.url);
+  }
   if (shortcut.type === 'bundle') {
     const badge = document.createElement('span');
     badge.className = 'badge';
     badge.textContent = 'bundle';
-    keyLine.appendChild(badge);
+    primary.appendChild(badge);
   } else if (shortcut.type === 'parameterized') {
     const badge = document.createElement('span');
     badge.className = 'badge badge-search';
     badge.textContent = 'search';
-    keyLine.appendChild(badge);
+    primary.appendChild(badge);
   }
 
+  // Secondary line: shown only when it adds detail beyond the primary line.
   const urlLine = document.createElement('div');
   urlLine.className = 'url';
   if (shortcut.type === 'bundle') {
-    urlLine.textContent = `${shortcut.bundleUrls?.length ?? 0} URLs`;
+    if (shortcut.label) {
+      const n = shortcut.bundleUrls?.length ?? 0;
+      urlLine.textContent = `${n} ${n === 1 ? 'tab' : 'tabs'}`;
+    }
   } else if (shortcut.type === 'parameterized') {
     urlLine.textContent = shortcut.urlTemplate ?? displayUrl(shortcut.url);
     urlLine.title = shortcut.urlTemplate ?? shortcut.url;
-  } else {
+  } else if (shortcut.label) {
     urlLine.textContent = displayUrl(shortcut.url);
     urlLine.title = shortcut.url;
   }
@@ -123,20 +141,22 @@ export function buildShortcutRow(
   }
   if (parts.length) stats.textContent = parts.join(' · ');
 
-  item.append(keyLine, urlLine, stats);
+  item.append(primary, urlLine, stats);
 
   const editBtn = document.createElement('button');
   editBtn.type = 'button';
   editBtn.className = 'btn-icon';
   editBtn.title = 'Edit';
-  editBtn.textContent = '✎';
+  editBtn.setAttribute('aria-label', `Edit ${shortcut.key}`);
+  editBtn.innerHTML = icon('edit');
   editBtn.addEventListener('click', () => openEdit(li));
 
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
   deleteBtn.className = 'btn-icon danger';
   deleteBtn.title = 'Delete';
-  deleteBtn.textContent = '×';
+  deleteBtn.setAttribute('aria-label', `Delete ${shortcut.key}`);
+  deleteBtn.innerHTML = icon('trash');
   deleteBtn.addEventListener('click', async () => {
     await deleteShortcut(shortcut.key);
     await onRender();
@@ -147,14 +167,15 @@ export function buildShortcutRow(
     aliasBtn.type = 'button';
     aliasBtn.className = 'btn-icon';
     aliasBtn.title = 'Add alias';
-    aliasBtn.textContent = '+';
+    aliasBtn.setAttribute('aria-label', `Add alias for ${shortcut.key}`);
+    aliasBtn.innerHTML = icon('alias');
     aliasBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       onAlias(shortcut);
     });
-    displayRow.append(item, aliasBtn, editBtn, deleteBtn);
+    displayRow.append(keycap, item, aliasBtn, editBtn, deleteBtn);
   } else {
-    displayRow.append(item, editBtn, deleteBtn);
+    displayRow.append(keycap, item, editBtn, deleteBtn);
   }
 
   // ── Edit form ──────────────────────────────────────────────────────────────
@@ -211,7 +232,20 @@ export function buildShortcutRow(
     if (editingRow === li) editingRow = null;
   });
 
-  editActions.append(saveBtn, cancelBtn);
+  if (onAlias && shortcut.type !== 'bundle') {
+    const editAliasBtn = document.createElement('button');
+    editAliasBtn.type = 'button';
+    editAliasBtn.className = 'btn-secondary btn-sm';
+    editAliasBtn.textContent = 'Add alias';
+    editAliasBtn.addEventListener('click', () => {
+      li.classList.remove('editing');
+      if (editingRow === li) editingRow = null;
+      onAlias(shortcut);
+    });
+    editActions.append(saveBtn, cancelBtn, editAliasBtn);
+  } else {
+    editActions.append(saveBtn, cancelBtn);
+  }
   editForm.append(keyInput, secondInput, editActions, editStatus);
 
   const cb = document.createElement('input');

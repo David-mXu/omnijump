@@ -5,156 +5,57 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OmniJump</title>
     <style>
-      body {
-        margin: 0;
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        min-width: 280px;
-        padding: 16px;
+      /* Shared tokens & components live in theme.css (imported via popup.ts).
+         Only popup-specific layout lives here. */
+      body { min-width: 300px; padding: var(--s4); }
+
+      .brand {
+        display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s3);
       }
-      h1 {
-        font-size: 14px;
-        margin: 0 0 8px;
-      }
-      label {
-        display: block;
-        font-size: 12px;
-        margin-top: 10px;
-      }
-      input {
-        width: 100%;
-        box-sizing: border-box;
-        margin-top: 4px;
-        padding: 6px 8px;
-        font-size: 12px;
-        border: 1px solid #d0d0d0;
-        border-radius: 4px;
-        outline: none;
-      }
-      input:focus {
-        border-color: #4c6ef5;
-        box-shadow: 0 0 0 2px rgba(76, 110, 245, 0.18);
-      }
-      button {
-        margin-top: 12px;
-        width: 100%;
-        padding: 8px 10px;
-        font-size: 12px;
-        border-radius: 4px;
-        cursor: pointer;
-      }
-      button[type="submit"] {
-        background: #4c6ef5;
-        color: white;
-        border: none;
-      }
-      button[type="submit"]:hover { background: #3b5de0; }
-      #status {
-        margin-top: 8px;
-        font-size: 12px;
-        color: #555;
-      }
+      .brand-mark { color: var(--accent); display: flex; }
+      .brand-name { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; color: var(--text); }
+      .brand-name b { color: var(--accent); }
+
+      label { display: block; font-size: 12px; margin-top: var(--s3); margin-bottom: var(--s1); color: var(--text-2); }
+      #shortcutKey { font-family: var(--font-mono); }
+
+      button[type="submit"] { margin-top: var(--s3); width: 100%; padding: 9px 10px; font-size: 13px; }
+      #status { margin-top: var(--s2); font-size: 12px; min-height: 14px; color: var(--text-2); }
+
       #openPanel {
-        margin-top: 8px;
-        width: 100%;
-        padding: 6px;
-        font-size: 11px;
-        background: none;
-        border: 1px solid #e0e0e0;
-        border-radius: 4px;
-        color: #888;
-        cursor: pointer;
+        margin-top: var(--s2); width: 100%; display: inline-flex; align-items: center;
+        justify-content: center; gap: 6px; padding: 7px; font-size: 11px;
+        background: none; border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text-3);
       }
-      #openPanel:hover {
-        background: #f5f5f5;
-        color: #555;
-      }
+      #openPanel svg { width: 13px; height: 13px; }
+      #openPanel:hover { background: var(--surface-2); color: var(--text); }
+
       #suggestion {
-        background: #f5f7ff;
-        border-left: 3px solid #4c6ef5;
-        border-radius: 4px;
-        padding: 8px 10px;
-        margin-bottom: 12px;
-        font-size: 12px;
+        background: var(--accent-weak); border-left: 3px solid var(--accent);
+        border-radius: var(--r-sm); padding: var(--s2) var(--s3);
+        margin-bottom: var(--s3); font-size: 12px;
       }
-      #suggestionText { color: #333; margin-bottom: 8px; line-height: 1.4; }
-      #suggestionActions { display: flex; gap: 6px; }
-      #saveSuggestion {
-        flex: 1; padding: 5px 8px; font-size: 11px; margin-top: 0;
-        background: #4c6ef5; color: white; border: none; border-radius: 3px; cursor: pointer;
-      }
-      #saveSuggestion:hover { background: #3b5de0; }
-      #dismissSuggestion {
-        padding: 5px 8px; font-size: 11px; margin-top: 0;
-        background: none; border: 1px solid #d0d0d0; border-radius: 3px; color: #777; cursor: pointer;
-      }
-      #dismissSuggestion:hover { background: #f5f5f5; }
-
-      /* ── URL ancestors ────────────────────────────────────────────────────── */
-      .url-ancestors {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-        margin-top: 4px;
-      }
-      .url-ancestors:empty { display: none; }
-      .url-ancestor-btn {
-        font-size: 11px;
-        padding: 2px 7px;
-        border-radius: 10px;
-        border: 1px solid #d0d0d0;
-        background: transparent;
-        color: #888;
-        cursor: pointer;
-        white-space: nowrap;
-        max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .url-ancestor-btn:hover {
-        background: #4c6ef5;
-        color: #fff;
-        border-color: #4c6ef5;
-      }
-      body.dark .url-ancestor-btn {
-        border-color: #3d3d3d;
-        color: #666;
-      }
-      body.dark .url-ancestor-btn:hover {
-        background: #7b9eff;
-        color: #1a1a1b;
-        border-color: #7b9eff;
-      }
-
-      /* ── Dark mode ────────────────────────────────────────────────────────── */
-      body.dark { background: #1a1a1b; color: #e0e0e0; }
-      body.dark h1 { color: #e0e0e0; }
-      body.dark label { color: #aaa; }
-      body.dark input {
-        background: #2a2a2a;
-        border-color: #3d3d3d;
-        color: #e0e0e0;
-      }
-      body.dark input::placeholder { color: #555; }
-      body.dark input:focus {
-        border-color: #7b9eff;
-        box-shadow: 0 0 0 2px rgba(123,158,255,0.18);
-      }
-      body.dark #status { color: #888; }
-      body.dark #openPanel { border-color: #333; color: #666; }
-      body.dark #openPanel:hover { background: #2a2a2a; color: #aaa; }
-      body.dark #suggestion { background: #1e2540; border-left-color: #7b9eff; }
-      body.dark #suggestionText { color: #ccc; }
-      body.dark #dismissSuggestion { border-color: #444; color: #888; }
-      body.dark #dismissSuggestion:hover { background: #2a2a2a; }
+      #suggestionText { color: var(--text); margin-bottom: var(--s2); line-height: 1.4; }
+      #suggestionActions { display: flex; gap: var(--s2); }
+      #saveSuggestion { flex: 1; }
     </style>
   </head>
   <body>
-    <h1>OmniJump</h1>
+    <header class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="3" width="18" height="18" rx="5" fill="currentColor"/>
+          <path d="M9 15 15 9M15 9H10M15 9v5" stroke="#fff" stroke-width="1.8"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <span class="brand-name">Omni<b>Jump</b></span>
+    </header>
     <div id="suggestion" hidden>
       <div id="suggestionText"></div>
       <div id="suggestionActions">
-        <button type="button" id="saveSuggestion">Save it</button>
-        <button type="button" id="dismissSuggestion">Dismiss</button>
+        <button type="button" id="saveSuggestion" class="btn-primary btn-sm">Save it</button>
+        <button type="button" id="dismissSuggestion" class="btn-secondary btn-sm">Dismiss</button>
       </div>
     </div>
     <form id="shortcutForm">
@@ -163,10 +64,14 @@
       <label for="shortcutUrl">Destination URL</label>
       <input id="shortcutUrl" type="text" placeholder="google.com or https://..." />
       <div id="urlAncestors" class="url-ancestors"></div>
-      <button type="submit">Save Shortcut</button>
+      <button type="submit" class="btn-primary">Save shortcut</button>
       <div id="status" role="status"></div>
     </form>
-    <button type="button" id="openPanel">Open full panel ↗</button>
+    <button type="button" id="openPanel">
+      Open full panel
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+    </button>
     <script type="module" src="./popup.ts"></script>
   </body>
 </html>
