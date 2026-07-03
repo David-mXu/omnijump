@@ -260,7 +260,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const url = info.menuItemId === 'omnijump-save-link' ? info.linkUrl : tab?.url;
-  if (!url) {
+  if (!url || !/^https?:/i.test(url)) {
     return;
   }
 

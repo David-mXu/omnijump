@@ -6,7 +6,10 @@ import { Suggestion } from './types';
 
 function normalizeUrl(input: string): string {
   const s = input.trim();
-  if (!s || /^https?:\/\//i.test(s)) return s;
+  if (!s) return s;
+  if (/^https?:\/\//i.test(s)) return s;
+  // Block non-http(s) schemes (javascript:, data:, vbscript:, file:, blob:, etc.)
+  if (/^[a-z][a-z0-9+\-.]*:/i.test(s)) return '';
   return `https://${s}`;
 }
 
