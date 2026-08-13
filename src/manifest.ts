@@ -67,7 +67,11 @@ export default function createManifest(target: BrowserTarget): Manifest {
   if (isFirefox) {
     (manifest as Manifest & {
       browser_specific_settings?: {
-        gecko?: { id: string; strict_min_version?: string };
+        gecko?: {
+          id: string;
+          strict_min_version?: string;
+          data_collection_permissions?: { required: string[]; optional: string[] };
+        };
       };
       sidebar_action?: { default_panel: string; default_title: string };
     }).browser_specific_settings = {
