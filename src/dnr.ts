@@ -24,6 +24,12 @@ function resolveShortcutUrl(shortcut: Shortcut): string | null {
   return shortcut.url;
 }
 
+function isSafeRedirectUrl(url: string | undefined | null): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return lower.startsWith('http:') || lower.startsWith('https:');
+}
+
 function buildRules(shortcuts: Shortcut[]): chrome.declarativeNetRequest.Rule[] {
   const rules: chrome.declarativeNetRequest.Rule[] = [];
   let id = 1;
@@ -31,6 +37,10 @@ function buildRules(shortcuts: Shortcut[]): chrome.declarativeNetRequest.Rule[] 
   for (const shortcut of shortcuts) {
     const url = resolveShortcutUrl(shortcut);
     if (!url) throw new Error(`Shortcut ${shortcut.key} has no target URL.`);
+
+    if (!isSafeRedirectUrl(url)) {
+      continue;
+    }
 
     // Exact-match rule (no argument, or all non-parameterized types)
     rules.push({
@@ -48,20 +58,22 @@ function buildRules(shortcuts: Shortcut[]): chrome.declarativeNetRequest.Rule[] 
 
     // Capture-group rule for parameterized shortcuts (keyword + argument)
     if (shortcut.type === 'parameterized' && shortcut.urlTemplate) {
-      rules.push({
-        id: id++,
-        priority: 2,
-        action: {
-          type: 'redirect' as chrome.declarativeNetRequest.RuleActionType,
-          redirect: {
-            regexSubstitution: shortcut.urlTemplate.replace('%s', '\\1'),
+      if (isSafeRedirectUrl(shortcut.urlTemplate)) {
+        rules.push({
+          id: id++,
+          priority: 2,
+          action: {
+            type: 'redirect' as chrome.declarativeNetRequest.RuleActionType,
+            redirect: {
+              regexSubstitution: shortcut.urlTemplate.replace('%s', '\\1'),
+            },
           },
-        },
-        condition: {
-          regexFilter: buildParamQueryRegex(shortcut.key),
-          resourceTypes: ['main_frame'] as chrome.declarativeNetRequest.ResourceType[],
-        },
-      });
+          condition: {
+            regexFilter: buildParamQueryRegex(shortcut.key),
+            resourceTypes: ['main_frame'] as chrome.declarativeNetRequest.ResourceType[],
+          },
+        });
+      }
     }
   }
 
@@ -76,7 +88,10 @@ export async function rebuildDynamicRules(): Promise<void> {
     throw new Error(`Shortcut limit exceeded (${MAX_DYNAMIC_RULES}).`);
   }
 
-  const rules = buildRules(shortcuts);
+  const rules = buildRules(shortcuts).filter((rule) => {
+    const redirectUrl = rule.action.redirect?.url || rule.action.redirect?.regexSubstitution || '';
+    return isSafeRedirectUrl(redirectUrl);
+  });
   const existing = await chrome.declarativeNetRequest.getDynamicRules();
   const removeRuleIds = existing.map((rule) => rule.id);
 

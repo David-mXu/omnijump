@@ -722,8 +722,27 @@ importFile.addEventListener('change', async () => {
       continue;
     }
     const normalized: Shortcut = { ...shortcut, key };
+    if (normalized.bundleUrls && Array.isArray(normalized.bundleUrls)) {
+      normalized.bundleUrls = normalized.bundleUrls
+        .map((u) => (typeof u === 'string' ? normalizeUrl(u) : ''))
+        .filter(Boolean);
+    }
     if (normalized.type === 'bundle' && normalized.bundleUrls?.length) {
       normalized.url = normalized.bundleUrls[0];
+    }
+    normalized.url = typeof normalized.url === 'string' ? normalizeUrl(normalized.url) : '';
+    if (normalized.urlTemplate && typeof normalized.urlTemplate === 'string') {
+      normalized.urlTemplate = normalizeUrl(normalized.urlTemplate);
+      if (!normalized.urlTemplate) {
+        failed++;
+        console.error('Failed to import shortcut (invalid urlTemplate after normalization):', s);
+        continue;
+      }
+    }
+    if (!normalized.url || (normalized.type === 'bundle' && (!normalized.bundleUrls || normalized.bundleUrls.length === 0))) {
+      failed++;
+      console.error('Failed to import shortcut (invalid or empty URL after normalization):', s);
+      continue;
     }
     try {
       await chrome.storage.sync.set({ [`${SHORTCUT_PREFIX}${key}`]: normalized });
