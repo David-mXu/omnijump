@@ -348,6 +348,60 @@ li:focus { outline: none; background: var(--surface); box-shadow: inset 2px 0 0 
 .error { color: var(--danger); }
 .success { color: var(--success); }
 
+/* ── Undo toast ────────────────────────────────────────────────────────── */
+.undo-toast {
+  position: fixed;
+  bottom: var(--s4);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  max-width: calc(100% - 2 * var(--s4));
+  padding: var(--s2) var(--s4);
+  background: var(--text);
+  color: var(--bg);
+  font-size: 12px;
+  border-radius: var(--r-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  z-index: 100;
+  white-space: nowrap;
+}
+.undo-toast span { overflow: hidden; text-overflow: ellipsis; }
+.undo-btn {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  color: var(--accent-weak);
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+body.dark .undo-btn { color: var(--accent); }
+.undo-btn:hover { text-decoration: underline; }
+
+/* ── Overwrite confirm (inline in form status) ─────────────────────────── */
+.confirm-overwrite { color: var(--danger); }
+
+/* ── Rows open on click ────────────────────────────────────────────────── */
+.display-row { cursor: pointer; }
+
+/* ── Keyboard hints footer ─────────────────────────────────────────────── */
+.kbd-hints {
+  font-size: 10px;
+  color: var(--text-3);
+  text-align: center;
+  padding: var(--s2) 0 var(--s1);
+}
+.kbd-hints .kbd {
+  font-family: var(--font-mono);
+  background: var(--key-bg);
+  border: 1px solid var(--key-border);
+  border-radius: 3px;
+  padding: 0 4px;
+  color: var(--key-text);
+}
+
 /* ── Reduced motion ────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

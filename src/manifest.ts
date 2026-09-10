@@ -35,6 +35,9 @@ export default function createManifest(target: BrowserTarget): Manifest {
       },
     },
     options_page: 'src/options.html',
+    // Explicit omnibox keyword: typing "oj " gives in-address-bar autocomplete
+    // of saved shortcuts, independent of the user's default search engine.
+    omnibox: { keyword: 'oj' },
     background: isFirefox
       ? ({ scripts: ['src/background.ts'], type: 'module' } as unknown as Manifest['background'])
       : { service_worker: 'src/background.ts', type: 'module' },

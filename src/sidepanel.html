@@ -87,6 +87,7 @@
       #addUrl svg { width: 14px; height: 14px; }
       #addUrl:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-weak); }
       #saveBundle { margin-top: var(--s4); width: 100%; padding: 9px; font-size: 13px; }
+      #cancelBundleEdit { margin-top: var(--s2); width: 100%; padding: 8px; font-size: 12px; }
       #bundleStatus { margin-top: var(--s2); }
       .bundle-tab-btns { display: flex; gap: var(--s2); margin-bottom: var(--s2); }
       .bundle-tab-btns button { flex: 1; padding: 6px 8px; font-size: 11px; }
@@ -220,6 +221,12 @@
       </div>
       <div id="noResults" class="empty-state" hidden>Nothing matches your filter.</div>
       <ul id="shortcutList"></ul>
+      <div id="kbdHints" class="kbd-hints" hidden>
+        <span class="kbd">j</span>/<span class="kbd">k</span> navigate ·
+        <span class="kbd">⏎</span> open ·
+        <span class="kbd">e</span> edit ·
+        <span class="kbd">d</span> delete
+      </div>
     </section>
 
     <!-- Bundle creation panel -->
@@ -259,6 +266,7 @@
           Add URL
         </button>
         <button type="submit" id="saveBundle" class="btn-primary">Save bundle</button>
+        <button type="button" id="cancelBundleEdit" class="btn-secondary" hidden>Cancel editing</button>
         <div id="bundleStatus" class="form-status" role="status"></div>
       </form>
     </section>

@@ -133,6 +133,17 @@ export async function deleteShortcuts(keys: string[]): Promise<void> {
   if (storageKeys.length > 0) await chrome.storage.sync.remove(storageKeys);
 }
 
+// Restores deleted shortcuts verbatim (keeping stats and timestamps), in one
+// batched write. Used by delete-undo; upsertShortcut would reset lastUsed.
+export async function restoreShortcuts(shortcuts: Shortcut[]): Promise<void> {
+  const writes: Record<string, Shortcut> = {};
+  for (const s of shortcuts) {
+    const key = normalizeKey(s.key);
+    if (key) writes[`${SHORTCUT_PREFIX}${key}`] = { ...s, key };
+  }
+  if (Object.keys(writes).length > 0) await chrome.storage.sync.set(writes);
+}
+
 export async function touchShortcut(key: string): Promise<void> {
   const normalized = normalizeKey(key);
   const storageKey = `${SHORTCUT_PREFIX}${normalized}`;

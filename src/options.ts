@@ -1,8 +1,8 @@
 import './theme.css';
 import { icon } from './icons';
 import { IS_FIREFOX } from './platform';
-import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, clearAllStats, deleteShortcut, deleteShortcuts, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
-import { buildShortcutRow, normalizeUrl } from './ui';
+import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, clearAllStats, deleteShortcut, deleteShortcuts, getStore, normalizeKey, renameShortcut, restoreShortcuts, saveSettings, upsertShortcut } from './storage';
+import { buildShortcutRow, normalizeUrl, openShortcut, renderOverwriteConfirm, savedStatusMessage, showUndoToast } from './ui';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
 import { fuzzyFilter } from './fuzzy';
 import { Shortcut, UserSettings } from './types';
@@ -21,6 +21,7 @@ const emptyStateEl = document.getElementById('emptyState') as HTMLDivElement;
 const noResultsEl = document.getElementById('noResults') as HTMLDivElement;
 const countEl = document.getElementById('count') as HTMLDivElement;
 const filterInput = document.getElementById('filterInput') as HTMLInputElement;
+const kbdHintsEl = document.getElementById('kbdHints') as HTMLDivElement;
 const selectToggleBtn = document.getElementById('selectToggle') as HTMLButtonElement;
 const deleteSelectedBtn = document.getElementById('deleteSelected') as HTMLButtonElement;
 const redirectKeyInput = document.getElementById('redirectKey') as HTMLInputElement;
@@ -32,6 +33,8 @@ const addRedirectStatusEl = document.getElementById('addRedirectStatus') as HTML
 const bundleForm = document.getElementById('bundleForm') as HTMLFormElement;
 const bundleKeyInput = document.getElementById('bundleKey') as HTMLInputElement;
 const bundleLabelInput = document.getElementById('bundleLabel') as HTMLInputElement;
+const saveBundleBtn = document.getElementById('saveBundle') as HTMLButtonElement;
+const cancelBundleEditBtn = document.getElementById('cancelBundleEdit') as HTMLButtonElement;
 const urlListEl = document.getElementById('urlList') as HTMLDivElement;
 const addUrlBtn = document.getElementById('addUrl') as HTMLButtonElement;
 const bundleStatusEl = document.getElementById('bundleStatus') as HTMLDivElement;
@@ -120,9 +123,10 @@ function renderList(): void {
   emptyStateEl.hidden = !isEmpty;
   noResultsEl.hidden = !noResults;
   listEl.hidden = isEmpty || noResults;
+  kbdHintsEl.hidden = isEmpty;
 
   const frag = document.createDocumentFragment();
-  filtered.forEach((s) => frag.appendChild(buildShortcutRow(s, refresh)));
+  filtered.forEach((s) => frag.appendChild(buildShortcutRow(s, refresh, undefined, false, handleEditBundle)));
   listEl.replaceChildren(frag);
 }
 
@@ -137,7 +141,13 @@ function renderSettings(): void {
 
 async function refresh(): Promise<void> {
   const store = await getStore();
-  shortcutCache = Object.values(store.shortcuts);
+  // Most-used first, so the shortcuts people actually reach for stay on top.
+  shortcutCache = Object.values(store.shortcuts).sort(
+    (a, b) =>
+      (b.useCount ?? 0) - (a.useCount ?? 0) ||
+      (b.lastUsed ?? 0) - (a.lastUsed ?? 0) ||
+      a.key.localeCompare(b.key)
+  );
   settingsCache = { ...store.settings };
   document.body.classList.toggle('dark', settingsCache.darkMode);
   renderList();
@@ -171,11 +181,16 @@ deleteSelectedBtn.addEventListener('click', async () => {
   const keys = Array.from(
     listEl.querySelectorAll<HTMLInputElement>('.select-cb:checked')
   ).map(cb => cb.dataset.key!);
+  const deleted = shortcutCache.filter(s => keys.includes(s.key));
   await deleteShortcuts(keys);
   listEl.classList.remove('selecting');
   selectToggleBtn.textContent = 'Select';
   deleteSelectedBtn.hidden = true;
   await refresh();
+  showUndoToast(`Deleted ${deleted.length} shortcut${deleted.length === 1 ? '' : 's'}`, async () => {
+    await restoreShortcuts(deleted);
+    await refresh();
+  });
 });
 
 // ── Add Redirect form ─────────────────────────────────────────────────────────
@@ -191,21 +206,17 @@ searchToggleBtn.addEventListener('click', () => {
   searchToggleBtn.textContent = isSearchType ? 'Remove search shortcut' : 'Make search shortcut';
 });
 
-saveRedirectBtn.addEventListener('click', async () => {
-  const key = normalizeKey(redirectKeyInput.value);
-
-  if (!key) { setRedirectStatus('Enter a keyword.', 'error'); return; }
+async function persistRedirect(key: string): Promise<void> {
+  const totalAfter = shortcutCache.some(s => s.key === key)
+    ? shortcutCache.length
+    : shortcutCache.length + 1;
 
   if (isSearchType) {
     const urlTemplate = redirectUrlTemplateInput.value.trim();
-    if (!urlTemplate.includes('%s')) {
-      setRedirectStatus('Search URL must include %s.', 'error');
-      return;
-    }
     const fallbackUrl = normalizeUrl(redirectUrlInput.value) || urlTemplate.replace('%s', '');
     try {
       await upsertShortcut({ key, url: fallbackUrl, urlTemplate, type: 'parameterized' });
-      setRedirectStatus(`Saved "${key}".`, 'success');
+      setRedirectStatus(savedStatusMessage(key, totalAfter), 'success');
       redirectKeyInput.value = '';
       redirectUrlInput.value = '';
       redirectUrlTemplateInput.value = '';
@@ -220,17 +231,51 @@ saveRedirectBtn.addEventListener('click', async () => {
   }
 
   const url = normalizeUrl(redirectUrlInput.value);
-  if (!url) { setRedirectStatus('Enter a URL.', 'error'); return; }
-
   try {
     await upsertShortcut({ key, url, type: 'redirect' });
-    setRedirectStatus(`Saved "${key}".`, 'success');
+    setRedirectStatus(savedStatusMessage(key, totalAfter), 'success');
     redirectKeyInput.value = '';
     redirectUrlInput.value = '';
     await refresh();
   } catch (err) {
     setRedirectStatus((err as Error).message, 'error');
   }
+}
+
+saveRedirectBtn.addEventListener('click', async () => {
+  const key = normalizeKey(redirectKeyInput.value);
+
+  if (!key) { setRedirectStatus('Enter a keyword.', 'error'); return; }
+
+  if (isSearchType) {
+    const urlTemplate = redirectUrlTemplateInput.value.trim();
+    if (!urlTemplate.includes('%s')) {
+      setRedirectStatus('Search URL must include %s.', 'error');
+      return;
+    }
+  } else if (!normalizeUrl(redirectUrlInput.value)) {
+    setRedirectStatus('Enter a URL.', 'error');
+    return;
+  }
+
+  // The keyword is taken and points elsewhere: ask instead of silently clobbering.
+  const existing = shortcutCache.find(s => s.key === key);
+  const newTarget = isSearchType
+    ? redirectUrlTemplateInput.value.trim()
+    : normalizeUrl(redirectUrlInput.value);
+  if (existing && (existing.urlTemplate ?? existing.url) !== newTarget) {
+    const alt = uniqueKey(key, new Set(shortcutCache.map(s => s.key)));
+    renderOverwriteConfirm(
+      addRedirectStatusEl,
+      existing,
+      alt,
+      () => void persistRedirect(key),
+      (altKey) => void persistRedirect(altKey),
+    );
+    return;
+  }
+
+  await persistRedirect(key);
 });
 
 // ── Bundle form ───────────────────────────────────────────────────────────────
@@ -447,6 +492,62 @@ function setBundleStatus(msg: string, type: 'error' | 'success' | '' = ''): void
   bundleStatusEl.className = type ? `form-status ${type}` : 'form-status';
 }
 
+// ── Bundle editing ────────────────────────────────────────────────────────────
+// A bundle's URLs can only be changed here, so "Edit" on a bundle row loads it
+// into this form instead of the inline key/label editor.
+let editingBundleKey: string | null = null;
+
+function exitBundleEditMode(): void {
+  editingBundleKey = null;
+  saveBundleBtn.textContent = 'Save bundle';
+  cancelBundleEditBtn.hidden = true;
+}
+
+function handleEditBundle(shortcut: Shortcut): void {
+  showTab('bundle');
+  editingBundleKey = shortcut.key;
+  bundleKeyInput.value = shortcut.key;
+  bundleLabelInput.value = shortcut.label ?? '';
+  urlListEl.innerHTML = '';
+  (shortcut.bundleUrls?.length ? shortcut.bundleUrls : [shortcut.url]).forEach(u => addUrlRow(u));
+  saveBundleBtn.textContent = 'Update bundle';
+  cancelBundleEditBtn.hidden = false;
+  setBundleStatus(`Editing bundle "${shortcut.key}".`);
+  bundleKeyInput.focus();
+}
+
+cancelBundleEditBtn.addEventListener('click', () => {
+  exitBundleEditMode();
+  bundleForm.reset();
+  resetUrlList();
+  setBundleStatus('');
+});
+
+async function persistBundle(
+  key: string,
+  label: string | undefined,
+  urls: string[],
+  original: Shortcut | undefined,
+): Promise<void> {
+  try {
+    if (original && original.key !== key) {
+      // Rename: write-new-then-remove-old so a failure can't lose the bundle.
+      await renameShortcut(original.key, { ...original, key, label, url: urls[0], bundleUrls: urls });
+    } else if (original) {
+      await upsertShortcut({ ...original, key, label, url: urls[0], bundleUrls: urls });
+    } else {
+      await upsertShortcut({ key, url: urls[0], type: 'bundle', bundleUrls: urls, label });
+    }
+    setBundleStatus(original ? `Bundle "${key}" updated.` : `Bundle "${key}" saved.`, 'success');
+    exitBundleEditMode();
+    bundleForm.reset();
+    resetUrlList();
+    await refresh();
+  } catch (err) {
+    setBundleStatus((err as Error).message, 'error');
+  }
+}
+
 bundleForm.addEventListener('submit', async (event) => {
   event.preventDefault();
 
@@ -459,15 +560,29 @@ bundleForm.addEventListener('submit', async (event) => {
   if (!key) { setBundleStatus('Enter a keyword.', 'error'); return; }
   if (urls.length < 2) { setBundleStatus('Add at least 2 URLs.', 'error'); return; }
 
-  try {
-    await upsertShortcut({ key, url: urls[0], type: 'bundle', bundleUrls: urls, label });
-    setBundleStatus(`Bundle "${key}" saved.`, 'success');
-    bundleForm.reset();
-    resetUrlList();
-    await refresh();
-  } catch (err) {
-    setBundleStatus((err as Error).message, 'error');
+  const original = editingBundleKey
+    ? shortcutCache.find(s => s.key === editingBundleKey)
+    : undefined;
+
+  const collides = shortcutCache.find(s => s.key === key && s.key !== editingBundleKey);
+  if (collides) {
+    if (original) {
+      // Renaming an existing bundle onto another shortcut's keyword.
+      setBundleStatus(`"${key}" is already used by another shortcut.`, 'error');
+      return;
+    }
+    const alt = uniqueKey(key, new Set(shortcutCache.map(s => s.key)));
+    renderOverwriteConfirm(
+      bundleStatusEl,
+      collides,
+      alt,
+      () => void persistBundle(key, label, urls, undefined),
+      (altKey) => void persistBundle(altKey, label, urls, undefined),
+    );
+    return;
   }
+
+  await persistBundle(key, label, urls, original);
 });
 
 // ── Settings tab ──────────────────────────────────────────────────────────────
@@ -704,10 +819,11 @@ document.addEventListener('keydown', (e) => {
     items[Math.max(idx - 1, 0)]?.focus();
   } else if ((e.key === 'Enter' || e.key === 'l') && focused) {
     // Open in a new tab: tabs.update without an id would navigate this options page away.
-    const url = focused.dataset.url;
-    if (url) chrome.tabs.create({ url });
+    const shortcut = shortcutCache.find(s => s.key === focused.dataset.key);
+    if (shortcut) openShortcut(shortcut);
+    else if (focused.dataset.url) chrome.tabs.create({ url: focused.dataset.url });
   } else if (e.key === 'e' && focused) {
-    focused.querySelector<HTMLButtonElement>('.btn-icon:not(.danger)')?.click();
+    focused.querySelector<HTMLButtonElement>('.edit-btn')?.click();
   } else if ((e.key === 'd' || e.key === 'Delete') && focused) {
     e.preventDefault();
     focused.querySelector<HTMLButtonElement>('.btn-icon.danger')?.click();

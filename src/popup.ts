@@ -3,7 +3,7 @@ import { IS_FIREFOX, openSidePanel } from './platform';
 import { addDismissedHost, getStore, normalizeKey, upsertShortcut } from './storage';
 import { suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
 import { Suggestion } from './types';
-import { normalizeUrl } from './ui';
+import { normalizeUrl, renderOverwriteConfirm, savedStatusMessage } from './ui';
 
 const form = document.getElementById('shortcutForm') as HTMLFormElement | null;
 const keyInput = document.getElementById('shortcutKey') as HTMLInputElement | null;
@@ -92,6 +92,16 @@ async function init(): Promise<void> {
   }
 }
 
+async function persistShortcut(key: string, url: string, totalAfter: number): Promise<void> {
+  try {
+    await upsertShortcut({ key, url, type: 'redirect' });
+    setStatus(savedStatusMessage(key, totalAfter));
+  } catch (error) {
+    setStatus('Failed to save shortcut.');
+    console.error(error);
+  }
+}
+
 form?.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!keyInput || !urlInput) {
@@ -108,16 +118,23 @@ form?.addEventListener('submit', async (event) => {
 
   try {
     const store = await getStore();
-    const existingKeys = new Set<string>(Object.keys(store.shortcuts));
-    const unique = uniqueKey(key, existingKeys);
+    const existing = store.shortcuts[key];
+    const total = Object.keys(store.shortcuts).length;
 
-    await upsertShortcut({
-      key: unique,
-      url,
-      type: 'redirect',
-    });
+    // Same key pointing elsewhere: ask instead of silently renaming or clobbering.
+    if (existing && existing.url !== url && statusEl) {
+      const alt = uniqueKey(key, new Set(Object.keys(store.shortcuts)));
+      renderOverwriteConfirm(
+        statusEl,
+        existing,
+        alt,
+        () => void persistShortcut(key, url, total),
+        (altKey) => void persistShortcut(altKey, url, total + 1),
+      );
+      return;
+    }
 
-    setStatus(`Saved ${unique}.`);
+    await persistShortcut(key, url, existing ? total : total + 1);
   } catch (error) {
     setStatus('Failed to save shortcut.');
     console.error(error);

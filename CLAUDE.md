@@ -50,7 +50,10 @@ Ensure to commit and push changes when appropriate.
 - `popup.ts` / `popup.html` — quick-save the current tab as a redirect shortcut; auto-suggests a key from the hostname. Has an "Open Panel" button.
 - `sidepanel.ts` / `sidepanel.html` — three-tab panel: Shortcuts, New Bundle, Settings.
 - `options.ts` / `options.html` — full-page shortcut list (same feature set as the sidepanel's Shortcuts tab, shares `buildShortcutRow` from `ui.ts`).
-- `ui.ts` — shared `buildShortcutRow()` used by both the sidepanel and options page. Also exports `normalizeUrl()` (prepends `https://` if no protocol given).
+- `onboarding.ts` / `onboarding.html` — first-run welcome page explaining the address-bar mechanic; opened from `onInstalled` when `details.reason === 'install'`. Not referenced by the manifest, so it's an explicit rollup input in `vite.config.ts`.
+- `ui.ts` — shared `buildShortcutRow()` used by both the sidepanel and options page. Also exports `normalizeUrl()` (prepends `https://` if no protocol given), `openShortcut()` (opens a shortcut incl. all bundle tabs + touches stats), `showUndoToast()`, `renderOverwriteConfirm()`, and `savedStatusMessage()` (the first ≤3 saves teach the address-bar trick).
+
+**Omnibox keyword**: the manifest registers `omnibox: { keyword: 'oj' }`. `background.ts` suggests up to 8 fuzzy-matched shortcuts on `onInputChanged` (usage-sorted when the input is empty; XML-markup descriptions on Chrome, plain text on Firefox) and resolves redirect/search/bundle navigation on `onInputEntered`, honoring the disposition. Works with any default search engine, unlike the DNR path.
 
 **Shortcut lifecycle**:
 - `createdAt` is set on first save, preserved on updates.
@@ -58,8 +61,13 @@ Ensure to commit and push changes when appropriate.
 - `cleanupStaleShortcuts()` runs on `onInstalled` and `onStartup`. A shortcut is deleted when `lastUsed` (or `createdAt` if never used) is older than `staleDays`. Records with neither timestamp get `createdAt` stamped now, so they age from that point.
 
 **Side panel features**:
+- **List order**: most-used first (`useCount`, then `lastUsed`, then key) — applied in both sidepanel and options `refresh()`.
+- **Row interaction**: clicking a row (outside select mode) opens the shortcut in a new tab via `openShortcut()`; bundles open every URL. Keyboard: j/k navigate, Enter/l open, e edit, d delete (hints footer under the list).
 - **Filter bar**: hidden until the shortcut count reaches `filterThreshold` (default 25, configurable in Settings). Searches key, URL, and label in real time.
 - **Multi-select bulk delete**: "Select" button enters select mode; clicking a row or its checkbox toggles it. "Delete (N)" button appears when at least one is selected.
+- **Delete undo**: single-row and bulk deletes show a 6-second toast whose Undo restores the records verbatim via `restoreShortcuts()` (keeps stats; `upsertShortcut` would reset them).
+- **Overwrite protection**: saving a keyword that already points elsewhere (redirect/search/bundle forms, and the popup) renders an inline confirm — Overwrite, or save under a free alternative key. The popup no longer silently renames on collision.
+- **Bundle editing**: "Edit" on a bundle row loads key/label/URLs into the New Bundle form (`handleEditBundle`); the submit button becomes "Update bundle" with a cancel button. Renames go through `renameShortcut`. The inline row editor still handles key/label for non-bundle types (and bundles on pages without a bundle form).
 - **Live sync**: `chrome.storage.onChanged` listener re-renders the list whenever any `omnibar_s_` or `omnibar_settings` key changes, so edits from another device appear immediately.
 - **Add redirect form**: keyword + URL inputs with Enter key navigation (Enter in keyword → focus URL; Enter in URL → submit). Auto-focuses on panel open.
 - **TIP suggestion banner**: the background counts visits per host (per-tab sessions, finalized on host change or tab close; counts live in `chrome.storage.session`). After 3 visits to a host that no shortcut already covers it stores a `Suggestion` in `chrome.storage.session`. The panel reads this on open and shows a dismissable banner: "You often visit {Site}. Save '{key}' as a shortcut?" — pre-filling the redirect form. Dismissing records the host in `omnibar_dismissed`. Gated by the `smartSuggestions` setting (off by default).

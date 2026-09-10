@@ -1,8 +1,9 @@
 import { isSearchEngineUrl, rebuildDynamicRules } from './dnr';
-import { openSidePanel } from './platform';
+import { fuzzyFilter } from './fuzzy';
+import { IS_FIREFOX, openSidePanel } from './platform';
 import { SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, cleanupStaleShortcuts, getDismissedHosts, getStore, migrateFromLegacyStorage, normalizeKey, touchShortcut, upsertShortcut } from './storage';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
-import { ShortcutStore, Suggestion } from './types';
+import { Shortcut, ShortcutStore, Suggestion } from './types';
 
 async function syncRules(): Promise<void> {
   try {
@@ -214,7 +215,11 @@ chrome.runtime.onStartup.addListener(async () => {
   syncRules();
 });
 
-chrome.runtime.onInstalled.addListener(async () => {
+chrome.runtime.onInstalled.addListener(async (details) => {
+  if (details.reason === 'install') {
+    chrome.tabs.create({ url: chrome.runtime.getURL('src/onboarding.html') });
+  }
+
   await migrateFromLegacyStorage();
   await cleanupStaleShortcuts();
   syncRules();
@@ -355,6 +360,94 @@ async function handleJsRedirect(url: string, tabId: number): Promise<void> {
     await chrome.tabs.update(tabId, { url: target });
   }
 }
+
+// ── Omnibox ("oj" keyword) ────────────────────────────────────────────────────
+// In-address-bar autocomplete of saved shortcuts. Unlike the DNR redirect
+// path, this works with any default search engine.
+function escapeXml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]!
+  ));
+}
+
+function resolveTarget(shortcut: Shortcut, args: string): string | null {
+  if (shortcut.type === 'parameterized' && shortcut.urlTemplate) {
+    return args ? shortcut.urlTemplate.replace('%s', encodeURIComponent(args)) : shortcut.url;
+  }
+  if (shortcut.type === 'bundle') {
+    return shortcut.bundleUrls?.[0] ?? shortcut.url ?? null;
+  }
+  return shortcut.url;
+}
+
+function isHttpUrl(url: string | null | undefined): url is string {
+  return !!url && /^https?:/i.test(url);
+}
+
+async function navigateForDisposition(
+  url: string,
+  disposition: chrome.omnibox.OnInputEnteredDisposition
+): Promise<void> {
+  if (!isHttpUrl(url)) return;
+  if (disposition === 'currentTab') {
+    await chrome.tabs.update({ url });
+  } else {
+    await chrome.tabs.create({ url, active: disposition === 'newForegroundTab' });
+  }
+}
+
+chrome.omnibox.setDefaultSuggestion({
+  description: 'OmniJump: type a keyword, then press Enter to jump',
+});
+
+chrome.omnibox.onInputChanged.addListener(async (text, suggest) => {
+  const store = await getStore();
+  const parts = text.trim().split(/\s+/);
+  const query = parts[0] ?? '';
+  const args = parts.slice(1).join(' ');
+
+  const all = Object.values(store.shortcuts);
+  const matches = query
+    ? fuzzyFilter(query, all)
+    : all.sort((a, b) =>
+        (b.useCount ?? 0) - (a.useCount ?? 0) || (b.lastUsed ?? 0) - (a.lastUsed ?? 0)
+      );
+
+  suggest(matches.slice(0, 8).map((s) => {
+    const target = s.type === 'parameterized' ? (s.urlTemplate ?? s.url) : (resolveTarget(s, '') ?? '');
+    // Firefox renders descriptions as plain text; the XML markup is Chrome-only.
+    const description = IS_FIREFOX
+      ? `${s.key} — ${target}`
+      : `<match>${escapeXml(s.key)}</match> <dim>—</dim> <url>${escapeXml(target)}</url>`;
+    return { content: args ? `${s.key} ${args}` : s.key, description };
+  }));
+});
+
+chrome.omnibox.onInputEntered.addListener(async (text, disposition) => {
+  const parts = text.trim().split(/\s+/);
+  const key = normalizeKey(parts[0] ?? '');
+  if (!key) return;
+
+  const store = await getStore();
+  // Exact key first, else the best fuzzy match for a half-typed keyword.
+  const shortcut = store.shortcuts[key] ?? fuzzyFilter(key, Object.values(store.shortcuts))[0];
+  if (!shortcut) return;
+
+  const args = parts.slice(1).join(' ');
+
+  if (shortcut.type === 'bundle' && shortcut.bundleUrls?.length) {
+    const [first, ...rest] = shortcut.bundleUrls;
+    await navigateForDisposition(first, disposition);
+    await Promise.all(
+      rest.filter(isHttpUrl).map((url) => chrome.tabs.create({ url, active: false }))
+    );
+  } else {
+    const target = resolveTarget(shortcut, args);
+    if (target) await navigateForDisposition(target, disposition);
+  }
+
+  await touchShortcut(shortcut.key);
+});
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (details.frameId !== 0 || !details.url || details.tabId < 0) {

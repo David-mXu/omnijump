@@ -15,11 +15,14 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: `dist/${browser}`,
       emptyOutDir: true,
-      ...(browser === 'firefox' && {
-        rollupOptions: {
-          input: { sidepanel: 'src/sidepanel.html' },
+      rollupOptions: {
+        // onboarding.html isn't referenced by the manifest, so it must be an
+        // explicit input to end up in dist (opened via chrome.tabs.create).
+        input: {
+          onboarding: 'src/onboarding.html',
+          ...(browser === 'firefox' && { sidepanel: 'src/sidepanel.html' }),
         },
-      }),
+      },
     },
   };
 });

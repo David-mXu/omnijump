@@ -1,8 +1,94 @@
-import { deleteShortcut, normalizeKey, renameShortcut, upsertShortcut } from './storage';
+import { deleteShortcut, normalizeKey, renameShortcut, restoreShortcuts, touchShortcut, upsertShortcut } from './storage';
 import { icon } from './icons';
 import { Shortcut } from './types';
 
 export let hoveredRow: HTMLLIElement | null = null;
+
+// The first few saves double as a tutorial: teach the address-bar trick.
+export function savedStatusMessage(key: string, totalShortcuts: number): string {
+  return totalShortcuts <= 3
+    ? `Saved! Type "${key}" in your address bar and press Enter to jump.`
+    : `Saved "${key}".`;
+}
+
+// Human-readable destination for confirm prompts.
+export function describeTarget(s: Shortcut): string {
+  if (s.type === 'bundle') {
+    const n = s.bundleUrls?.length ?? 0;
+    return `a bundle of ${n} ${n === 1 ? 'tab' : 'tabs'}`;
+  }
+  return displayUrl(s.urlTemplate ?? s.url);
+}
+
+// Inline collision prompt rendered into a form's status element: the keyword
+// is taken, so the user picks between overwriting and a free alternative key.
+export function renderOverwriteConfirm(
+  statusEl: HTMLElement,
+  existing: Shortcut,
+  altKey: string | null,
+  onOverwrite: () => void,
+  onSaveAs: (altKey: string) => void,
+): void {
+  statusEl.className = 'form-status';
+  statusEl.textContent = '';
+
+  const text = document.createElement('span');
+  text.textContent = `"${existing.key}" already points to ${describeTarget(existing)}. `;
+
+  const overwriteBtn = document.createElement('button');
+  overwriteBtn.type = 'button';
+  overwriteBtn.className = 'btn-link confirm-overwrite';
+  overwriteBtn.textContent = 'Overwrite';
+  overwriteBtn.addEventListener('click', onOverwrite);
+
+  statusEl.append(text, overwriteBtn);
+
+  if (altKey) {
+    const altBtn = document.createElement('button');
+    altBtn.type = 'button';
+    altBtn.className = 'btn-link';
+    altBtn.textContent = `Save as "${altKey}"`;
+    altBtn.addEventListener('click', () => onSaveAs(altKey));
+    statusEl.append(document.createTextNode(' · '), altBtn);
+  }
+}
+
+// Bottom-of-page toast with an Undo action; replaces any toast still showing.
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+export function showUndoToast(message: string, onUndo: () => void | Promise<void>): void {
+  document.querySelector('.undo-toast')?.remove();
+  if (toastTimer !== null) clearTimeout(toastTimer);
+
+  const toast = document.createElement('div');
+  toast.className = 'undo-toast';
+  toast.setAttribute('role', 'status');
+
+  const text = document.createElement('span');
+  text.textContent = message;
+
+  const undoBtn = document.createElement('button');
+  undoBtn.type = 'button';
+  undoBtn.className = 'undo-btn';
+  undoBtn.textContent = 'Undo';
+  undoBtn.addEventListener('click', () => {
+    if (toastTimer !== null) { clearTimeout(toastTimer); toastTimer = null; }
+    toast.remove();
+    void onUndo();
+  });
+
+  toast.append(text, undoBtn);
+  document.body.appendChild(toast);
+  toastTimer = setTimeout(() => { toast.remove(); toastTimer = null; }, 6000);
+}
+
+// Opens a shortcut the way the omnibar would: bundles open every tab.
+export function openShortcut(shortcut: Shortcut): void {
+  const urls = shortcut.type === 'bundle' && shortcut.bundleUrls?.length
+    ? shortcut.bundleUrls
+    : [shortcut.url];
+  urls.forEach((url, i) => chrome.tabs.create({ url, active: i === 0 }));
+  void touchShortcut(shortcut.key);
+}
 
 export function normalizeUrl(input: string): string {
   const s = input.trim();
@@ -79,6 +165,7 @@ export function buildShortcutRow(
   onRender: () => Promise<void>,
   onAlias?: (shortcut: Shortcut) => void,
   isAlias = false,
+  onEditBundle?: (shortcut: Shortcut) => void,
 ): HTMLLIElement {
   const li = document.createElement('li');
   if (isAlias) li.classList.add('alias-row');
@@ -148,11 +235,17 @@ export function buildShortcutRow(
 
   const editBtn = document.createElement('button');
   editBtn.type = 'button';
-  editBtn.className = 'btn-icon';
+  editBtn.className = 'btn-icon edit-btn';
   editBtn.title = 'Edit';
   editBtn.setAttribute('aria-label', `Edit ${shortcut.key}`);
   editBtn.innerHTML = icon('edit');
-  editBtn.addEventListener('click', () => openEdit(li));
+  // Bundles are edited in the full bundle form (URLs included) when the host
+  // page provides one; the inline form only covers key + label.
+  if (shortcut.type === 'bundle' && onEditBundle) {
+    editBtn.addEventListener('click', () => onEditBundle(shortcut));
+  } else {
+    editBtn.addEventListener('click', () => openEdit(li));
+  }
 
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
@@ -163,6 +256,10 @@ export function buildShortcutRow(
   deleteBtn.addEventListener('click', async () => {
     await deleteShortcut(shortcut.key);
     await onRender();
+    showUndoToast(`Deleted "${shortcut.key}"`, async () => {
+      await restoreShortcuts([shortcut]);
+      await onRender();
+    });
   });
 
   if (onAlias && shortcut.type !== 'bundle') {
@@ -258,16 +355,22 @@ export function buildShortcutRow(
 
   li.tabIndex = 0;
   li.dataset.url = shortcut.url;
+  li.dataset.key = shortcut.key;
   li.addEventListener('mouseenter', () => { hoveredRow = li; });
   li.addEventListener('mouseleave', () => { if (hoveredRow === li) hoveredRow = null; });
 
   displayRow.prepend(cb);
 
   displayRow.addEventListener('click', (e) => {
-    if (!li.closest('ul')?.classList.contains('selecting')) return;
-    if (e.target === cb) return;
-    cb.checked = !cb.checked;
-    cb.dispatchEvent(new Event('change', { bubbles: true }));
+    if (li.closest('ul')?.classList.contains('selecting')) {
+      if (e.target === cb) return;
+      cb.checked = !cb.checked;
+      cb.dispatchEvent(new Event('change', { bubbles: true }));
+      return;
+    }
+    // Row buttons keep their own actions; anywhere else opens the shortcut.
+    if ((e.target as HTMLElement).closest('button')) return;
+    openShortcut(shortcut);
   });
 
   li.append(displayRow, editForm);
