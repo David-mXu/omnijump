@@ -1,7 +1,7 @@
 import './theme.css';
 import { icon } from './icons';
 import { IS_FIREFOX } from './platform';
-import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, clearAllStats, deleteShortcut, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
+import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, clearAllStats, deleteShortcut, deleteShortcuts, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
 import { buildShortcutRow, normalizeUrl } from './ui';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
 import { fuzzyFilter } from './fuzzy';
@@ -171,7 +171,7 @@ deleteSelectedBtn.addEventListener('click', async () => {
   const keys = Array.from(
     listEl.querySelectorAll<HTMLInputElement>('.select-cb:checked')
   ).map(cb => cb.dataset.key!);
-  await Promise.all(keys.map(deleteShortcut));
+  await deleteShortcuts(keys);
   listEl.classList.remove('selecting');
   selectToggleBtn.textContent = 'Select';
   deleteSelectedBtn.hidden = true;
@@ -624,6 +624,7 @@ importFile.addEventListener('change', async () => {
   }
   let imported = 0;
   let failed = 0;
+  const writes: Record<string, Shortcut> = {};
   for (const s of payload.shortcuts) {
     const shortcut = s as Shortcut;
     const key = normalizeKey(shortcut.key);
@@ -655,18 +656,21 @@ importFile.addEventListener('change', async () => {
       console.error('Failed to import shortcut (invalid or empty URL after normalization):', s);
       continue;
     }
+    writes[`${SHORTCUT_PREFIX}${key}`] = normalized;
+    imported++;
+  }
+  // Single batched write: one storage operation regardless of count, so a
+  // large import can't trip chrome.storage.sync's per-minute write quota.
+  if (imported > 0) {
     try {
-      await chrome.storage.sync.set({ [`${SHORTCUT_PREFIX}${key}`]: normalized });
-      imported++;
+      await chrome.storage.sync.set(writes);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('QUOTA_BYTES') || msg.toLowerCase().includes('quota')) {
-        dataStatusEl.textContent = 'Storage quota exceeded — import stopped. Delete some shortcuts to free up space.';
-        importFile.value = '';
-        return;
-      }
-      failed++;
-      console.error('Failed to import shortcut:', s, err);
+      dataStatusEl.textContent = msg.toLowerCase().includes('quota')
+        ? 'Storage quota exceeded — import failed. Delete some shortcuts to free up space.'
+        : `Import failed: ${msg}`;
+      importFile.value = '';
+      return;
     }
   }
   await refresh();
@@ -693,8 +697,9 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     items[Math.max(idx - 1, 0)]?.focus();
   } else if ((e.key === 'Enter' || e.key === 'l') && focused) {
+    // Open in a new tab: tabs.update without an id would navigate this options page away.
     const url = focused.dataset.url;
-    if (url) chrome.tabs.update({ url });
+    if (url) chrome.tabs.create({ url });
   } else if (e.key === 'e' && focused) {
     focused.querySelector<HTMLButtonElement>('.btn-icon:not(.danger)')?.click();
   } else if ((e.key === 'd' || e.key === 'Delete') && focused) {

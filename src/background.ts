@@ -1,4 +1,4 @@
-import { rebuildDynamicRules } from './dnr';
+import { isSearchEngineUrl, rebuildDynamicRules } from './dnr';
 import { openSidePanel } from './platform';
 import { SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, cleanupStaleShortcuts, getDismissedHosts, getStore, migrateFromLegacyStorage, normalizeKey, touchShortcut, upsertShortcut } from './storage';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
@@ -325,8 +325,9 @@ async function handleShortcutTouch(url: string): Promise<void> {
 }
 
 // Fallback JS redirect for browsers (e.g. Edge) that bypass DNR for
-// navigations to the configured search engine. DNR handles Chrome/Bing;
-// this catches what DNR misses without conflicting when DNR also fires.
+// navigations to the configured search engine. Runs on onCommitted rather
+// than onBeforeNavigate: when DNR already redirected, the committed URL is
+// the target (no search query), so this is a no-op and never double-fires.
 async function handleJsRedirect(url: string, tabId: number): Promise<void> {
   const query = extractQuery(url);
   if (!query) return;
@@ -365,9 +366,10 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
     return;
   }
 
-  void handleBundleNavigation(details.url, details.tabId);
-  void handleShortcutTouch(details.url);
-  void handleJsRedirect(details.url, details.tabId);
+  if (isSearchEngineUrl(details.url)) {
+    void handleBundleNavigation(details.url, details.tabId);
+    void handleShortcutTouch(details.url);
+  }
 });
 
 chrome.webNavigation.onCommitted.addListener((details) => {
@@ -375,5 +377,8 @@ chrome.webNavigation.onCommitted.addListener((details) => {
     return;
   }
 
+  if (isSearchEngineUrl(details.url)) {
+    void handleJsRedirect(details.url, details.tabId);
+  }
   void handleSmartTip(details.url, details.tabId);
 });

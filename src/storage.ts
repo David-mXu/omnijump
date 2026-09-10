@@ -126,6 +126,13 @@ export async function deleteShortcut(key: string): Promise<ShortcutStore> {
   return store;
 }
 
+// Removes many shortcuts in a single storage write so bulk deletes don't
+// exhaust chrome.storage.sync's per-minute write quota.
+export async function deleteShortcuts(keys: string[]): Promise<void> {
+  const storageKeys = keys.map((k) => `${SHORTCUT_PREFIX}${normalizeKey(k)}`);
+  if (storageKeys.length > 0) await chrome.storage.sync.remove(storageKeys);
+}
+
 export async function touchShortcut(key: string): Promise<void> {
   const normalized = normalizeKey(key);
   const storageKey = `${SHORTCUT_PREFIX}${normalized}`;
@@ -160,6 +167,13 @@ export async function touchShortcut(key: string): Promise<void> {
 export async function renameShortcut(originalKey: string, updated: Shortcut): Promise<void> {
   const newKey = normalizeKey(updated.key);
   const oldKey = normalizeKey(originalKey);
+  if (!newKey) throw new Error('Shortcut key is empty after normalization.');
+  if (newKey !== oldKey) {
+    const existing = await chrome.storage.sync.get(`${SHORTCUT_PREFIX}${newKey}`);
+    if (existing[`${SHORTCUT_PREFIX}${newKey}`]) {
+      throw new Error(`A shortcut named "${newKey}" already exists.`);
+    }
+  }
   const normalized = { ...updated, key: newKey };
   await chrome.storage.sync.set({ [`${SHORTCUT_PREFIX}${newKey}`]: normalized });
   await chrome.storage.sync.remove(`${SHORTCUT_PREFIX}${oldKey}`);

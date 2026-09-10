@@ -1,7 +1,7 @@
 import './theme.css';
 import { icon } from './icons';
 import { IS_FIREFOX } from './platform';
-import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, clearAllStats, deleteShortcut, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
+import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, clearAllStats, deleteShortcut, deleteShortcuts, getStore, normalizeKey, saveSettings, upsertShortcut } from './storage';
 import { buildShortcutRow, hoveredRow, normalizeUrl } from './ui';
 import { suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
 import { fuzzyFilter } from './fuzzy';
@@ -213,7 +213,7 @@ deleteSelectedBtn.addEventListener('click', async () => {
   const keys = Array.from(
     listEl.querySelectorAll<HTMLInputElement>('.select-cb:checked')
   ).map(cb => cb.dataset.key!);
-  await Promise.all(keys.map(deleteShortcut));
+  await deleteShortcuts(keys);
   listEl.classList.remove('selecting');
   selectToggleBtn.textContent = 'Select';
   deleteSelectedBtn.hidden = true;
@@ -713,6 +713,7 @@ importFile.addEventListener('change', async () => {
   // The only hard cap is Chrome's 512-item storage limit.
   let imported = 0;
   let failed = 0;
+  const writes: Record<string, Shortcut> = {};
   for (const s of payload.shortcuts) {
     const shortcut = s as Shortcut;
     const key = normalizeKey(shortcut.key);
@@ -744,18 +745,21 @@ importFile.addEventListener('change', async () => {
       console.error('Failed to import shortcut (invalid or empty URL after normalization):', s);
       continue;
     }
+    writes[`${SHORTCUT_PREFIX}${key}`] = normalized;
+    imported++;
+  }
+  // Single batched write: one storage operation regardless of count, so a
+  // large import can't trip chrome.storage.sync's per-minute write quota.
+  if (imported > 0) {
     try {
-      await chrome.storage.sync.set({ [`${SHORTCUT_PREFIX}${key}`]: normalized });
-      imported++;
+      await chrome.storage.sync.set(writes);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('QUOTA_BYTES') || msg.toLowerCase().includes('quota')) {
-        dataStatusEl.textContent = 'Storage quota exceeded — import stopped. Delete some shortcuts to free up space.';
-        importFile.value = '';
-        return;
-      }
-      failed++;
-      console.error('Failed to import shortcut:', s, err);
+      dataStatusEl.textContent = msg.toLowerCase().includes('quota')
+        ? 'Storage quota exceeded — import failed. Delete some shortcuts to free up space.'
+        : `Import failed: ${msg}`;
+      importFile.value = '';
+      return;
     }
   }
   if (payload.dailyCounts && typeof payload.dailyCounts === 'object' && !Array.isArray(payload.dailyCounts)) {

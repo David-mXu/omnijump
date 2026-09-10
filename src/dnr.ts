@@ -7,14 +7,26 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Search engines whose `q=` parameter carries the omnibar query. Redirect
+// rules are scoped to these hosts so an unrelated page with `?q=key` is
+// never intercepted.
+const SEARCH_HOST_REGEX_SOURCE =
+  '^https?://(?:[a-z0-9-]+\\.)*(?:google\\.[a-z]+(?:\\.[a-z]+)?|bing\\.com|duckduckgo\\.com|search\\.brave\\.com|kagi\\.com|ecosia\\.org|startpage\\.com)/';
+
+const SEARCH_HOST_REGEX = new RegExp(SEARCH_HOST_REGEX_SOURCE, 'i');
+
+export function isSearchEngineUrl(url: string): boolean {
+  return SEARCH_HOST_REGEX.test(url);
+}
+
 function buildQueryRegex(key: string): string {
   const escapedKey = escapeRegex(key);
-  return `[?&]q=${escapedKey}(?:&|$)`;
+  return `${SEARCH_HOST_REGEX_SOURCE}[^#]*[?&]q=${escapedKey}(?:&|$)`;
 }
 
 function buildParamQueryRegex(key: string): string {
   const escapedKey = escapeRegex(key);
-  return `^.*[?&]q=${escapedKey}(?:\\+|%20)(.+?)(?:&.*)?$`;
+  return `${SEARCH_HOST_REGEX_SOURCE}[^#]*[?&]q=${escapedKey}(?:\\+|%20)(.+?)(?:&.*)?$`;
 }
 
 function resolveShortcutUrl(shortcut: Shortcut): string | null {

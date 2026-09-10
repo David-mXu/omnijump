@@ -37,7 +37,7 @@ Ensure to commit and push changes when appropriate.
 
 1. Shortcuts are stored in `chrome.storage.sync` as individual keys — `omnibar_s_{normalizedKey}` per shortcut, `omnibar_settings` for settings. This avoids the 8 KB per-item limit that a single-key approach would hit, while keeping cross-device sync. Practical ceiling is ~511 shortcuts (chrome.storage.sync's 512-item cap).
 2. On every storage change, `background.ts` calls `rebuildDynamicRules()` from `dnr.ts`, which clears all existing DNR dynamic rules and re-adds rules built from the full current store. Rule IDs are positional (`index + 1`).
-3. DNR rules match omnibar searches by intercepting the search engine URL (e.g. `https://google.com/search?q=gh`) via a regex on the `q=` query parameter and redirecting to the shortcut's target URL.
+3. DNR rules match omnibar searches by intercepting the search engine URL (e.g. `https://google.com/search?q=gh`) via a regex on the `q=` query parameter and redirecting to the shortcut's target URL. The regex is scoped to known search-engine hosts (`SEARCH_HOST_REGEX_SOURCE` in `dnr.ts`), so `?q=` on unrelated sites is never intercepted; `isSearchEngineUrl()` applies the same gate to the service worker's navigation listeners.
 4. For `bundle` shortcuts, the DNR rule redirects to the first URL. The service worker also listens on `webNavigation.onBeforeNavigate`, detects bundle keyword matches, and opens the remaining URLs as background tabs.
 
 **Shortcut types**:

@@ -7,6 +7,8 @@ import {
   getStore,
   upsertShortcut,
   deleteShortcut,
+  deleteShortcuts,
+  renameShortcut,
   saveSettings,
   migrateFromLegacyStorage,
   getDismissedHosts,
@@ -214,5 +216,24 @@ describe('addDismissedHost', () => {
     await addDismissedHost('github.com');
     await addDismissedHost('github.com');
     expect(Object.keys(syncStore[DISMISSED_KEY] as object)).toHaveLength(1);
+  });
+});
+
+describe('renameShortcut collisions', () => {
+  it('refuses to rename onto an existing key', async () => {
+    await upsertShortcut({ key: 'a', url: 'https://a.com', type: 'redirect' });
+    await upsertShortcut({ key: 'b', url: 'https://b.com', type: 'redirect' });
+    await expect(renameShortcut('a', { key: 'b', url: 'https://a.com', type: 'redirect' }))
+      .rejects.toThrow(/already exists/);
+    const store = await getStore();
+    expect(store.shortcuts.b.url).toBe('https://b.com');
+    expect(store.shortcuts.a).toBeDefined();
+  });
+
+  it('deleteShortcuts removes many keys in one call', async () => {
+    await upsertShortcut({ key: 'a', url: 'https://a.com', type: 'redirect' });
+    await upsertShortcut({ key: 'b', url: 'https://b.com', type: 'redirect' });
+    await deleteShortcuts(['a', 'b']);
+    expect(Object.keys((await getStore()).shortcuts)).toHaveLength(0);
   });
 });

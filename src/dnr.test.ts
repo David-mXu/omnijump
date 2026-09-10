@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createChromeMock } from './test/chrome-mock';
-import { rebuildDynamicRules } from './dnr';
-import { SHORTCUT_PREFIX } from './storage';
+import { isSearchEngineUrl, rebuildDynamicRules } from './dnr';
+import { SHORTCUT_PREFIX, upsertShortcut } from './storage';
 
 let syncStore: Record<string, unknown>;
 let dnrRules: chrome.declarativeNetRequest.Rule[];
@@ -126,5 +126,23 @@ describe('rebuildDynamicRules', () => {
       const match = regex.exec('https://google.com/search?q=yt+lofi+hip+hop');
       expect(match?.[1]).toBe('lofi+hip+hop');
     });
+  });
+});
+
+describe('search-engine host scoping', () => {
+  it('does not match ?q=key on a non-search-engine host', async () => {
+    await upsertShortcut({ key: 'gh', url: 'https://github.com', type: 'redirect' });
+    await rebuildDynamicRules();
+    const rules = await chrome.declarativeNetRequest.getDynamicRules();
+    const regex = new RegExp(rules[0].condition.regexFilter ?? '');
+    expect(regex.test('https://docs.example.com/page?q=gh')).toBe(false);
+    expect(regex.test('https://www.google.co.uk/search?q=gh')).toBe(true);
+    expect(regex.test('https://www.bing.com/search?q=gh&form=x')).toBe(true);
+  });
+
+  it('isSearchEngineUrl recognises search hosts only', () => {
+    expect(isSearchEngineUrl('https://www.google.com/search?q=x')).toBe(true);
+    expect(isSearchEngineUrl('https://duckduckgo.com/?q=x')).toBe(true);
+    expect(isSearchEngineUrl('https://example.com/?q=x')).toBe(false);
   });
 });
