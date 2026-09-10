@@ -9,6 +9,7 @@ import {
   deleteShortcut,
   deleteShortcuts,
   renameShortcut,
+  cleanupStaleShortcuts,
   saveSettings,
   migrateFromLegacyStorage,
   getDismissedHosts,
@@ -235,5 +236,23 @@ describe('renameShortcut collisions', () => {
     await upsertShortcut({ key: 'b', url: 'https://b.com', type: 'redirect' });
     await deleteShortcuts(['a', 'b']);
     expect(Object.keys((await getStore()).shortcuts)).toHaveLength(0);
+  });
+});
+
+describe('cleanupStaleShortcuts', () => {
+  const DAY = 86_400_000;
+  it('ages never-used shortcuts from createdAt instead of faking lastUsed', async () => {
+    await saveSettings({ ...DEFAULT_SETTINGS, staleAutoDelete: true, staleDays: 30 });
+    await chrome.storage.sync.set({
+      [`${SHORTCUT_PREFIX}old`]: { key: 'old', url: 'https://a.com', type: 'redirect', createdAt: Date.now() - 40 * DAY },
+      [`${SHORTCUT_PREFIX}fresh`]: { key: 'fresh', url: 'https://b.com', type: 'redirect', createdAt: Date.now() - 5 * DAY },
+      [`${SHORTCUT_PREFIX}legacy`]: { key: 'legacy', url: 'https://c.com', type: 'redirect' },
+    });
+    await cleanupStaleShortcuts();
+    const store = await getStore();
+    expect(store.shortcuts.old).toBeUndefined();
+    expect(store.shortcuts.fresh.lastUsed).toBeUndefined();
+    expect(store.shortcuts.legacy.lastUsed).toBeUndefined();
+    expect(typeof store.shortcuts.legacy.createdAt).toBe('number');
   });
 });

@@ -3,15 +3,7 @@ import { IS_FIREFOX, openSidePanel } from './platform';
 import { addDismissedHost, getStore, normalizeKey, upsertShortcut } from './storage';
 import { suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
 import { Suggestion } from './types';
-
-function normalizeUrl(input: string): string {
-  const s = input.trim();
-  if (!s) return s;
-  if (/^https?:\/\//i.test(s)) return s;
-  // Block non-http(s) schemes (javascript:, data:, vbscript:, file:, blob:, etc.)
-  if (/^[a-z][a-z0-9+\-.]*:/i.test(s)) return '';
-  return `https://${s}`;
-}
+import { normalizeUrl } from './ui';
 
 const form = document.getElementById('shortcutForm') as HTMLFormElement | null;
 const keyInput = document.getElementById('shortcutKey') as HTMLInputElement | null;
@@ -48,7 +40,7 @@ function showSuggestion(s: Suggestion, tabId: number): void {
   const text = document.getElementById('suggestionText');
   if (!el || !text) return;
 
-  text.textContent = `You often search ${s.siteName}. Save "${s.key}" as a shortcut?`;
+  text.textContent = `You often visit ${s.siteName}. Save "${s.key}" as a shortcut?`;
   el.hidden = false;
 
   document.getElementById('saveSuggestion')?.addEventListener('click', async () => {

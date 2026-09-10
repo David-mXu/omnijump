@@ -208,9 +208,12 @@ export async function cleanupStaleShortcuts(): Promise<void> {
   const toDelete: string[] = [];
 
   for (const [key, shortcut] of Object.entries(store.shortcuts)) {
-    if (shortcut.lastUsed === undefined) {
-      toGrace[`${SHORTCUT_PREFIX}${key}`] = { ...shortcut, lastUsed: now };
-    } else if (shortcut.lastUsed < cutoff) {
+    // Never-used shortcuts age from creation so the UI doesn't show a fake
+    // "used today". Records with neither timestamp get createdAt stamped now.
+    const reference = shortcut.lastUsed ?? shortcut.createdAt;
+    if (reference === undefined) {
+      toGrace[`${SHORTCUT_PREFIX}${key}`] = { ...shortcut, createdAt: now };
+    } else if (reference < cutoff) {
       toDelete.push(`${SHORTCUT_PREFIX}${key}`);
     }
   }

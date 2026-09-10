@@ -146,3 +146,16 @@ describe('search-engine host scoping', () => {
     expect(isSearchEngineUrl('https://example.com/?q=x')).toBe(false);
   });
 });
+
+describe('malformed records', () => {
+  it('skips a shortcut with no URL instead of aborting the rebuild', async () => {
+    await chrome.storage.sync.set({
+      [`${SHORTCUT_PREFIX}bad`]: { key: 'bad', url: '', type: 'redirect' },
+      [`${SHORTCUT_PREFIX}ok`]: { key: 'ok', url: 'https://ok.com', type: 'redirect' },
+    });
+    await expect(rebuildDynamicRules()).resolves.toBeUndefined();
+    const rules = await chrome.declarativeNetRequest.getDynamicRules();
+    expect(rules).toHaveLength(1);
+    expect(rules[0].condition.isUrlFilterCaseSensitive).toBe(false);
+  });
+});

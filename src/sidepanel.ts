@@ -392,7 +392,6 @@ async function openTabPicker(): Promise<void> {
     cb.type = 'checkbox';
     cb.className = 'tab-pick-cb';
     cb.value = tab.url!;
-    cb.checked = true;
 
     const favicon = document.createElement('img');
     favicon.className = 'tab-favicon';
@@ -492,7 +491,6 @@ function openShortcutPicker(): void {
       cb.type = 'checkbox';
       cb.className = 'shortcut-pick-cb';
       cb.value = shortcut.url;
-      cb.checked = true;
 
       const item = document.createElement('div');
       item.className = 'shortcut-pick-item';
@@ -678,6 +676,8 @@ exportBtn.addEventListener('click', async () => {
 });
 
 importBtn.addEventListener('click', () => importFile.click());
+const VALID_TYPES = new Set<string>(['redirect', 'bundle', 'parameterized']);
+
 importFile.addEventListener('change', async () => {
   const file = importFile.files?.[0];
   if (!file) return;
@@ -722,7 +722,13 @@ importFile.addEventListener('change', async () => {
       console.error('Failed to import shortcut (empty key after normalization):', s);
       continue;
     }
-    const normalized: Shortcut = { ...shortcut, key };
+    const type = shortcut.type ?? 'redirect';
+    if (!VALID_TYPES.has(type)) {
+      failed++;
+      console.error('Failed to import shortcut (unknown type):', s);
+      continue;
+    }
+    const normalized: Shortcut = { ...shortcut, key, type };
     if (normalized.bundleUrls && Array.isArray(normalized.bundleUrls)) {
       normalized.bundleUrls = normalized.bundleUrls
         .map((u) => (typeof u === 'string' ? normalizeUrl(u) : ''))
@@ -808,12 +814,18 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ── Toggle close via keyboard shortcut ───────────────────────────────────────
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message.type === 'close-panel') {
-    sendResponse({ closed: true });
-    window.close();
-  }
-});
+// Long-lived port so the background knows the panel is open. Reconnects if
+// the service worker restarts (which disconnects every port).
+function connectToBackground(): void {
+  const port = chrome.runtime.connect({ name: 'sidepanel' });
+  port.onMessage.addListener((message) => {
+    if (message?.type === 'close-panel') window.close();
+  });
+  port.onDisconnect.addListener(() => {
+    setTimeout(connectToBackground, 250);
+  });
+}
+connectToBackground();
 
 // ── Live sync ─────────────────────────────────────────────────────────────────
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -902,7 +914,6 @@ redirectUrlInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); saveRedirectBtn.click(); }
 });
 
-chrome.runtime.sendMessage({ type: 'panel-opened' });
 resetUrlList();
 
 // Await refresh so shortcutCache is warm before initRedirectForm reads it,

@@ -14,8 +14,6 @@ async function syncRules(): Promise<void> {
 
 const TIP_THRESHOLD = 3;
 
-const SEARCH_PARAMS = ['q', 'query', 'search_query', 'search', 'k', 'keyword', 's', 'text'];
-
 const SEARCH_ENGINE_BLOCKLIST = new Set([
   'bing.com', 'duckduckgo.com', 'yahoo.com', 'baidu.com',
   'yandex.com', 'yandex.ru', 'startpage.com', 'ecosia.org',
@@ -25,21 +23,6 @@ const SEARCH_ENGINE_BLOCKLIST = new Set([
 function isBlocklisted(host: string): boolean {
   if (host.startsWith('google.')) return true;
   return SEARCH_ENGINE_BLOCKLIST.has(host);
-}
-
-function detectSearch(url: string): { param: string; baseUrl: string; host: string } | null {
-  try {
-    const parsed = new URL(url);
-    const host = parsed.hostname.replace(/^www\./, '');
-    for (const param of SEARCH_PARAMS) {
-      if (parsed.searchParams.has(param)) {
-        return { param, baseUrl: `${parsed.origin}${parsed.pathname}?${param}=`, host };
-      }
-    }
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 const SITE_NAMES: Record<string, string> = {
@@ -61,8 +44,14 @@ function buildSuggestedKey(host: string, store: ShortcutStore): string {
   return uniqueKey(base, existing);
 }
 
+// In-memory guard checked synchronously so two near-simultaneous events in
+// the same worker instance can't both pass the async session-storage check.
+const recentBundleTriggers = new Map<number, number>();
+
 async function shouldHandleBundle(tabId: number): Promise<boolean> {
   const now = Date.now();
+  if (now - (recentBundleTriggers.get(tabId) ?? 0) < 1500) return false;
+  recentBundleTriggers.set(tabId, now);
   const result = await chrome.storage.session.get('bundleTriggers');
   const triggers = (result.bundleTriggers ?? {}) as Record<number, number>;
   if (now - (triggers[tabId] ?? 0) < 1500) return false;
@@ -111,7 +100,7 @@ async function handleBundleNavigation(url: string, tabId: number): Promise<void>
 }
 
 async function finalizeTabSession(
-  session: { host: string; param: string; baseUrl: string }
+  session: { host: string }
 ): Promise<void> {
   const r = await chrome.storage.session.get('searchVisitCounts');
   const counts = (r.searchVisitCounts ?? {}) as Record<string, number>;
@@ -121,7 +110,7 @@ async function finalizeTabSession(
 
 async function resetTabSession(
   tabId: number,
-  sessions: Record<number, { host: string; param: string; baseUrl: string } | null>
+  sessions: Record<number, { host: string } | null>
 ): Promise<void> {
   sessions[tabId] = null;
   await chrome.storage.session.set({ tabActiveSessions: sessions });
@@ -129,7 +118,7 @@ async function resetTabSession(
 
 async function clearTipState(
   tabId: number,
-  sessions: Record<number, { host: string; param: string; baseUrl: string } | null>
+  sessions: Record<number, { host: string } | null>
 ): Promise<void> {
   sessions[tabId] = null;
   await Promise.all([
@@ -156,7 +145,7 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
   } catch { /* ignore non-URL */ }
 
   const sessRes = await chrome.storage.session.get(['tabActiveSessions', 'searchVisitCounts']);
-  const sessions = (sessRes.tabActiveSessions ?? {}) as Record<number, { host: string; param: string; baseUrl: string } | null>;
+  const sessions = (sessRes.tabActiveSessions ?? {}) as Record<number, { host: string } | null>;
   const prev = sessions[tabId] ?? null;
 
   if (prev && prev.host !== host) {
@@ -180,10 +169,12 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
     return;
   }
 
-  const alreadyCovered = Object.values(store.shortcuts).some((s) => {
-    try { return new URL(s.url).hostname.replace(/^www\./, '') === host; }
-    catch { return false; }
-  });
+  const hostOf = (u: string): string | null => {
+    try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return null; }
+  };
+  const alreadyCovered = Object.values(store.shortcuts).some((s) =>
+    [s.url, ...(s.bundleUrls ?? [])].some((u) => hostOf(u) === host)
+  );
   if (alreadyCovered) {
     await clearTipState(tabId, sessions);
     return;
@@ -196,7 +187,7 @@ async function handleSmartTip(url: string, tabId: number): Promise<void> {
   }
 
   if (!prev || prev.host !== host) {
-    sessions[tabId] = { host, param: '', baseUrl: siteUrl };
+    sessions[tabId] = { host };
     await chrome.storage.session.set({ tabActiveSessions: sessions });
   }
 
@@ -284,21 +275,25 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
-// Tracks whether the side panel is currently open.
-// Reset on service-worker restart (worst case: next shortcut press opens the panel).
-let panelOpen = false;
+// The side panel holds a long-lived port while open; its disconnect (user
+// closes the panel, or the worker restarts) is how we know it's gone.
+let panelPort: chrome.runtime.Port | null = null;
 
-chrome.runtime.onMessage.addListener((message) => {
-  if (message.type === 'panel-opened') panelOpen = true;
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== 'sidepanel') return;
+  panelPort = port;
+  port.onDisconnect.addListener(() => {
+    if (panelPort === port) panelPort = null;
+  });
 });
 
 chrome.commands.onCommand.addListener((command, tab) => {
   if (command !== 'open-side-panel') return;
 
-  if (panelOpen) {
+  if (panelPort) {
     // Close: no user gesture required for window.close() in the panel.
-    chrome.runtime.sendMessage({ type: 'close-panel' });
-    panelOpen = false;
+    panelPort.postMessage({ type: 'close-panel' });
+    panelPort = null;
   } else {
     // Open: must happen before any await to keep the user-gesture context alive.
     if (tab?.id !== undefined) {
@@ -309,7 +304,7 @@ chrome.commands.onCommand.addListener((command, tab) => {
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   const r = await chrome.storage.session.get('tabActiveSessions');
-  const sessions = (r.tabActiveSessions ?? {}) as Record<number, { host: string; param: string; baseUrl: string } | null>;
+  const sessions = (r.tabActiveSessions ?? {}) as Record<number, { host: string } | null>;
   const session = sessions[tabId];
   if (session) await finalizeTabSession(session);
   delete sessions[tabId];

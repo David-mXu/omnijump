@@ -55,18 +55,18 @@ Ensure to commit and push changes when appropriate.
 **Shortcut lifecycle**:
 - `createdAt` is set on first save, preserved on updates.
 - `lastUsed` is updated via `touchShortcut()` in `storage.ts` each time a shortcut is activated via the omnibar (detected in `handleShortcutTouch` in `background.ts`).
-- `cleanupStaleShortcuts()` runs on `onInstalled` and `onStartup`. Shortcuts with `lastUsed` older than `staleDays` are deleted. Shortcuts with no `lastUsed` (brand new) get a grace period: their `lastUsed` is set to `Date.now()` rather than being immediately deleted.
+- `cleanupStaleShortcuts()` runs on `onInstalled` and `onStartup`. A shortcut is deleted when `lastUsed` (or `createdAt` if never used) is older than `staleDays`. Records with neither timestamp get `createdAt` stamped now, so they age from that point.
 
 **Side panel features**:
 - **Filter bar**: hidden until the shortcut count reaches `filterThreshold` (default 25, configurable in Settings). Searches key, URL, and label in real time.
 - **Multi-select bulk delete**: "Select" button enters select mode; clicking a row or its checkbox toggles it. "Delete (N)" button appears when at least one is selected.
 - **Live sync**: `chrome.storage.onChanged` listener re-renders the list whenever any `omnibar_s_` or `omnibar_settings` key changes, so edits from another device appear immediately.
 - **Add redirect form**: keyword + URL inputs with Enter key navigation (Enter in keyword → focus URL; Enter in URL → submit). Auto-focuses on panel open.
-- **TIP suggestion banner**: the background tracks how many times the user searches a site (per-tab sessions, finalized on host change or tab close). After 3 visits it stores a `Suggestion` in `chrome.storage.session`. The panel reads this on open and shows a dismissable banner: "You often search {Site}. Save '{key}' as a shortcut?" — pre-filling the redirect form. The background detects multiple search params (`q`, `query`, `search_query`, `s`, etc.) to cover more search engines.
+- **TIP suggestion banner**: the background counts visits per host (per-tab sessions, finalized on host change or tab close; counts live in `chrome.storage.session`). After 3 visits to a host that no shortcut already covers it stores a `Suggestion` in `chrome.storage.session`. The panel reads this on open and shows a dismissable banner: "You often visit {Site}. Save '{key}' as a shortcut?" — pre-filling the redirect form. Dismissing records the host in `omnibar_dismissed`. Gated by the `smartSuggestions` setting (off by default).
 
 **Bundle panel features**:
 - "Add all open tabs" fills the URL list with all HTTP tabs in the current window.
-- Tab picker: shows tabs with favicons and checkboxes, then inserts the selected URLs.
+- Tab picker: shows tabs with favicons and checkboxes (none pre-selected), then inserts the selected URLs.
 - Drag to reorder: URL rows are draggable via the HTML drag-and-drop API; `dragover` handles insertion point calculation.
 
 **Settings panel**:

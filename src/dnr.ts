@@ -47,10 +47,10 @@ function buildRules(shortcuts: Shortcut[]): chrome.declarativeNetRequest.Rule[] 
   let id = 1;
 
   for (const shortcut of shortcuts) {
+    // Skip (don't throw): one malformed record must not block every other rule.
     const url = resolveShortcutUrl(shortcut);
-    if (!url) throw new Error(`Shortcut ${shortcut.key} has no target URL.`);
-
-    if (!isSafeRedirectUrl(url)) {
+    if (!url || !isSafeRedirectUrl(url)) {
+      console.warn(`OmniJump: skipping shortcut "${shortcut.key}" with no valid http(s) target.`);
       continue;
     }
 
@@ -64,6 +64,7 @@ function buildRules(shortcuts: Shortcut[]): chrome.declarativeNetRequest.Rule[] 
       },
       condition: {
         regexFilter: buildQueryRegex(shortcut.key),
+        isUrlFilterCaseSensitive: false,
         resourceTypes: ['main_frame'] as chrome.declarativeNetRequest.ResourceType[],
       },
     });
@@ -82,6 +83,7 @@ function buildRules(shortcuts: Shortcut[]): chrome.declarativeNetRequest.Rule[] 
           },
           condition: {
             regexFilter: buildParamQueryRegex(shortcut.key),
+            isUrlFilterCaseSensitive: false,
             resourceTypes: ['main_frame'] as chrome.declarativeNetRequest.ResourceType[],
           },
         });

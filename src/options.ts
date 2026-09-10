@@ -314,7 +314,6 @@ async function openTabPicker(): Promise<void> {
     cb.type = 'checkbox';
     cb.className = 'tab-pick-cb';
     cb.value = tab.url!;
-    cb.checked = true;
 
     const favicon = document.createElement('img');
     favicon.className = 'tab-favicon';
@@ -411,7 +410,6 @@ function openShortcutPicker(): void {
       cb.type = 'checkbox';
       cb.className = 'shortcut-pick-cb';
       cb.value = shortcut.url;
-      cb.checked = true;
 
       const item = document.createElement('div');
       item.className = 'shortcut-pick-item';
@@ -592,6 +590,8 @@ exportBtn.addEventListener('click', async () => {
 });
 
 importBtn.addEventListener('click', () => importFile.click());
+const VALID_TYPES = new Set<string>(['redirect', 'bundle', 'parameterized']);
+
 importFile.addEventListener('change', async () => {
   const file = importFile.files?.[0];
   if (!file) return;
@@ -633,7 +633,13 @@ importFile.addEventListener('change', async () => {
       console.error('Failed to import shortcut (empty key after normalization):', s);
       continue;
     }
-    const normalized: Shortcut = { ...shortcut, key };
+    const type = shortcut.type ?? 'redirect';
+    if (!VALID_TYPES.has(type)) {
+      failed++;
+      console.error('Failed to import shortcut (unknown type):', s);
+      continue;
+    }
+    const normalized: Shortcut = { ...shortcut, key, type };
     if (normalized.bundleUrls && Array.isArray(normalized.bundleUrls)) {
       normalized.bundleUrls = normalized.bundleUrls
         .map((u) => (typeof u === 'string' ? normalizeUrl(u) : ''))
