@@ -99,6 +99,10 @@ Tests live alongside source files (`*.test.ts`) and use **Vitest** with a Node e
 
 CI runs on every push via `.github/workflows/ci.yml`: `npm ci` → `tsc --noEmit` → `npm test`.
 
+## Releasing
+
+The extension version lives only in `package.json` (`src/manifest.ts` imports it). `npm version patch && git push --follow-tags` pushes a `vX.Y.Z` tag, which triggers `.github/workflows/release.yml`: tests, builds both targets, uploads and auto-publishes the Chrome build to the Chrome Web Store via the official API, and attaches both zips to a GitHub release. One-time credential setup is in `docs/publishing.md`.
+
 ## Known issues / remaining gaps
 
 None currently known.

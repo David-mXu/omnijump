@@ -1,0 +1,64 @@
+# Publishes to the Chrome Web Store when a version tag is pushed.
+#
+#   npm version patch            # bumps package.json (manifest reads it) + creates tag vX.Y.Z
+#   git push --follow-tags       # triggers this workflow
+#
+# Required repository secrets (Settings → Secrets → Actions):
+#   CWS_EXTENSION_ID     the 32-char id from the Developer Dashboard
+#   CWS_CLIENT_ID        OAuth client id     (Google Cloud → APIs & Services → Credentials)
+#   CWS_CLIENT_SECRET    OAuth client secret
+#   CWS_REFRESH_TOKEN    refresh token for the dashboard owner's Google account
+# See docs/publishing.md for the one-time setup that produces these.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+
+      - name: Check tag matches package.json version
+        run: |
+          PKG="v$(node -p "require('./package.json').version")"
+          if [ "$PKG" != "${GITHUB_REF_NAME}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package.json ${PKG}"; exit 1
+          fi
+
+      - run: npm run build:all
+
+      - name: Package zips
+        run: |
+          (cd dist/chrome  && zip -qr ../omnijump-chrome-${GITHUB_REF_NAME}.zip .)
+          (cd dist/firefox && zip -qr ../omnijump-firefox-${GITHUB_REF_NAME}.zip .)
+
+      - name: Upload and publish to Chrome Web Store
+        env:
+          EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: |
+          npx --yes chrome-webstore-upload-cli@3 upload \
+            --source dist/omnijump-chrome-${GITHUB_REF_NAME}.zip \
+            --auto-publish
+
+      - name: Attach zips to the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true
