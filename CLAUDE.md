@@ -24,7 +24,14 @@ npm test
 npm run test:watch
 ```
 
-No dev server is configured. Load the built extension from `dist/chrome` or `dist/firefox` in the browser's extension manager.
+### Dev loop (no manual reloading)
+
+```bash
+npm run dev          # Chrome: CRXJS dev server with HMR, writes dist/chrome
+npm run dev:firefox  # Firefox: rebuilds dist/firefox on every save
+```
+
+`npm run dev`: load `dist/chrome` as an unpacked extension **once** (from Windows Chrome under WSL: `\\wsl.localhost\<distro>\home\...\OmniJump\dist\chrome`). Keep the dev server running — popup/sidepanel/options hot-update on save and the service worker auto-reloads; no chrome://extensions visits needed. If you stop the server the dev extension won't work until you restart it. `onboarding.html` is not emitted in dev mode (use `build:chrome` to test the first-run page). Run `npm run build:chrome` before loading a production build.
 Ensure to commit and push changes when appropriate.
 
 ## Architecture

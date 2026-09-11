@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "vite --mode chrome",
+    "dev:firefox": "vite build --mode firefox --watch",
     "build:chrome": "vite build --mode chrome",
     "build:firefox": "vite build --mode firefox",
     "build:all": "npm run build:chrome && npm run build:firefox",
