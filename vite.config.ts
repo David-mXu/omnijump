@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite';
 import { crx } from '@crxjs/vite-plugin';
 import createManifest from './src/manifest';
+import { devReload } from './scripts/dev-reload-plugin';
 
 export default defineConfig(({ mode }) => {
+  const watching = process.env.VITE_DEV_RELOAD === '1';
   const browser = mode === 'firefox' ? 'firefox' : 'chrome';
 
   return {
@@ -11,6 +13,7 @@ export default defineConfig(({ mode }) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         manifest: createManifest(browser) as any,
       }),
+      ...(watching ? [devReload()] : []),
     ],
     build: {
       outDir: `dist/${browser}`,

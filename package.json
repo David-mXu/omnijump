@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --mode chrome",
-    "dev:firefox": "vite build --mode firefox --watch",
+    "dev": "VITE_DEV_RELOAD=1 vite build --mode chrome --watch",
+    "dev:firefox": "VITE_DEV_RELOAD=1 vite build --mode firefox --watch",
     "build:chrome": "vite build --mode chrome",
     "build:firefox": "vite build --mode firefox",
     "build:all": "npm run build:chrome && npm run build:firefox",
@@ -15,8 +15,10 @@
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0",
     "@types/chrome": "^0.0.267",
+    "@types/ws": "^8.18.1",
     "typescript": "^5.5.4",
     "vite": "^5.4.0",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.6",
+    "ws": "^8.21.3"
   }
 }
