@@ -6,3 +6,4 @@ dist/
 *.zip
 .github/prompts/chat.json
 *:Zone.Identifier
+OmniJump files/

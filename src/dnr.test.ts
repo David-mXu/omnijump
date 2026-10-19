@@ -140,10 +140,58 @@ describe('search-engine host scoping', () => {
     expect(regex.test('https://www.bing.com/search?q=gh&form=x')).toBe(true);
   });
 
+  it('does not match Google subdomains like docs.google.com or drive.google.com', async () => {
+    await upsertShortcut({ key: 'homelab', url: 'https://homelab.local', type: 'redirect' });
+    await rebuildDynamicRules();
+    const rules = await chrome.declarativeNetRequest.getDynamicRules();
+    const regex = new RegExp(rules[0].condition.regexFilter ?? '');
+    expect(regex.test('https://docs.google.com/document/u/0/?q=homelab')).toBe(false);
+    expect(regex.test('https://drive.google.com/drive/u/0/search?q=homelab')).toBe(false);
+    expect(regex.test('https://mail.google.com/mail/u/0/?q=homelab')).toBe(false);
+    expect(regex.test('https://calendar.google.com/calendar/u/0/r?q=homelab')).toBe(false);
+    expect(regex.test('https://www.google.com/maps?q=homelab')).toBe(false);
+    expect(regex.test('https://www.google.com/finance?q=homelab')).toBe(false);
+  });
+
+  it('allows parameterized search shortcuts pointing to Google Docs without shortcut override', async () => {
+    await upsertShortcut({
+      key: 'docs',
+      url: 'https://docs.google.com',
+      urlTemplate: 'https://docs.google.com/document/u/0/?q=%s',
+      type: 'parameterized',
+    });
+    await upsertShortcut({
+      key: 'homelab',
+      url: 'https://homelab.local',
+      type: 'redirect',
+    });
+    await rebuildDynamicRules();
+    const rules = await chrome.declarativeNetRequest.getDynamicRules();
+
+    const docsParamRule = rules.find(r => r.priority === 2 && r.condition.regexFilter?.includes('q=docs'));
+    expect(docsParamRule).toBeDefined();
+
+    const paramRegex = new RegExp(docsParamRule?.condition.regexFilter ?? '');
+    const match = paramRegex.exec('https://www.google.com/search?q=docs+homelab');
+    expect(match?.[1]).toBe('homelab');
+
+    const homelabRule = rules.find(r => r.priority === 1 && r.condition.regexFilter?.includes('q=homelab'));
+    expect(homelabRule).toBeDefined();
+
+    const homelabRegex = new RegExp(homelabRule?.condition.regexFilter ?? '');
+    // The Google Docs search URL must NOT be intercepted by the homelab rule
+    expect(homelabRegex.test('https://docs.google.com/document/u/0/?q=homelab')).toBe(false);
+  });
+
   it('isSearchEngineUrl recognises search hosts only', () => {
     expect(isSearchEngineUrl('https://www.google.com/search?q=x')).toBe(true);
+    expect(isSearchEngineUrl('https://google.com/search?q=x')).toBe(true);
     expect(isSearchEngineUrl('https://duckduckgo.com/?q=x')).toBe(true);
+    expect(isSearchEngineUrl('https://www.bing.com/search?q=x')).toBe(true);
     expect(isSearchEngineUrl('https://example.com/?q=x')).toBe(false);
+    expect(isSearchEngineUrl('https://docs.google.com/document/u/0/?q=x')).toBe(false);
+    expect(isSearchEngineUrl('https://drive.google.com/drive/u/0/search?q=x')).toBe(false);
+    expect(isSearchEngineUrl('https://www.google.com/maps?q=x')).toBe(false);
   });
 });
 

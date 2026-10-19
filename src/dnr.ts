@@ -8,12 +8,20 @@ function escapeRegex(value: string): string {
 }
 
 // Search engines whose `q=` parameter carries the omnibar query. Redirect
-// rules are scoped to these hosts so an unrelated page with `?q=key` is
-// never intercepted.
+// rules are scoped to these hosts and search paths so unrelated services
+// (e.g. docs.google.com, drive.google.com) with `?q=key` are never intercepted.
 const SEARCH_HOST_REGEX_SOURCE =
-  '^https?://(?:[a-z0-9-]+\\.)*(?:google\\.[a-z]+(?:\\.[a-z]+)?|bing\\.com|duckduckgo\\.com|search\\.brave\\.com|kagi\\.com|ecosia\\.org|startpage\\.com)/';
+  '^https?://(?:' +
+  '(?:www\\.)?google\\.[a-z]+(?:\\.[a-z]+)?/(?:search|webhp)?' +
+  '|(?:www\\.|cn\\.)?bing\\.com/search' +
+  '|(?:(?:www|html|lite)\\.)?duckduckgo\\.com/(?:html/|lite/)?' +
+  '|search\\.brave\\.com/(?:search)?' +
+  '|(?:www\\.)?kagi\\.com/(?:search)?' +
+  '|(?:www\\.)?ecosia\\.org/(?:search)?' +
+  '|(?:www\\.)?startpage\\.com/(?:sp/search|do/search|search)?' +
+  ')';
 
-const SEARCH_HOST_REGEX = new RegExp(SEARCH_HOST_REGEX_SOURCE, 'i');
+const SEARCH_HOST_REGEX = new RegExp(`${SEARCH_HOST_REGEX_SOURCE}(?:[?#]|$)`, 'i');
 
 export function isSearchEngineUrl(url: string): boolean {
   return SEARCH_HOST_REGEX.test(url);
@@ -21,12 +29,12 @@ export function isSearchEngineUrl(url: string): boolean {
 
 function buildQueryRegex(key: string): string {
   const escapedKey = escapeRegex(key);
-  return `${SEARCH_HOST_REGEX_SOURCE}[^#]*[?&]q=${escapedKey}(?:&|$)`;
+  return `${SEARCH_HOST_REGEX_SOURCE}(?:\\?[^#]*&|\\?)q=${escapedKey}(?:[&#]|$)`;
 }
 
 function buildParamQueryRegex(key: string): string {
   const escapedKey = escapeRegex(key);
-  return `${SEARCH_HOST_REGEX_SOURCE}[^#]*[?&]q=${escapedKey}(?:\\+|%20)(.+?)(?:&.*)?$`;
+  return `${SEARCH_HOST_REGEX_SOURCE}(?:\\?[^#]*&|\\?)q=${escapedKey}(?:\\+|%20)(.+?)(?:[&#].*)?$`;
 }
 
 function resolveShortcutUrl(shortcut: Shortcut): string | null {
