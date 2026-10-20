@@ -9,6 +9,7 @@
     "build:chrome": "vite build --mode chrome",
     "build:firefox": "vite build --mode firefox",
     "build:all": "npm run build:chrome && npm run build:firefox",
+    "upload:cws": "npm run build:chrome && npx chrome-webstore-upload-cli --source dist/chrome",
     "test": "vitest run",
     "test:watch": "vitest"
   },

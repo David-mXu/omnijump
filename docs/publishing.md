@@ -3,7 +3,8 @@
 Releases are automated by `.github/workflows/release.yml`: pushing a `vX.Y.Z`
 tag runs the tests, builds both targets, uploads the Chrome build to the
 Chrome Web Store, auto-publishes it, and attaches both zips to a GitHub
-release.
+release. You can also trigger a manual deployment directly from GitHub Actions
+via "Run workflow" under the Release workflow.
 
 ## Cutting a release
 
@@ -11,6 +12,9 @@ release.
 npm version patch        # or minor / major — updates package.json and tags
 git push --follow-tags
 ```
+
+Or trigger a manual upload of the latest `main` branch from GitHub Actions:
+**Actions** → **Release** → **Run workflow**.
 
 The manifest version is read from `package.json`, so that is the only file
 to bump. The workflow refuses to run if the tag and package version differ.
@@ -46,19 +50,20 @@ Google account that owns the item in the Developer Dashboard.
    ```
 
    The response contains `refresh_token`.
-7. **Add four repository secrets** (GitHub → Settings → Secrets and
-   variables → Actions): `CWS_EXTENSION_ID`, `CWS_CLIENT_ID`,
-   `CWS_CLIENT_SECRET`, `CWS_REFRESH_TOKEN`.
+7. **Add repository secrets** (GitHub → Settings → Secrets and
+   variables → Actions): `CHROME_EXTENSION_ID` (or `CWS_EXTENSION_ID`),
+   `CHROME_PUBLISHER_ID` (or `CWS_PUBLISHER_ID`), `CHROME_CLIENT_ID`,
+   `CHROME_CLIENT_SECRET`, and `CHROME_REFRESH_TOKEN`.
 
-Uploads still go through Google's review; `--auto-publish` submits for
-review and publishes when approved. Drop that flag to upload as a draft.
+Uploads go through Google's review; running without subcommands submits for
+review and publishes when approved.
 
 ## Local dry run
 
 ```bash
 npm run build:chrome
-npx chrome-webstore-upload-cli@3 upload --source dist/chrome \
-  --extension-id ... --client-id ... --client-secret ... --refresh-token ...
+EXTENSION_ID=... PUBLISHER_ID=... CLIENT_ID=... CLIENT_SECRET=... REFRESH_TOKEN=... \
+  npx chrome-webstore-upload-cli --source dist/chrome
 ```
 
 ## Firefox (not automated yet)

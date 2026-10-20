@@ -1,20 +1,31 @@
-# Publishes to the Chrome Web Store when a version tag is pushed.
+# Publishes to the Chrome Web Store when a version tag is pushed or triggered manually.
 #
+# Automated release via git tag:
 #   npm version patch            # bumps package.json (manifest reads it) + creates tag vX.Y.Z
 #   git push --follow-tags       # triggers this workflow
 #
-# Required repository secrets (Settings → Secrets → Actions):
-#   CWS_EXTENSION_ID     the 32-char id from the Developer Dashboard
-#   CWS_CLIENT_ID        OAuth client id     (Google Cloud → APIs & Services → Credentials)
-#   CWS_CLIENT_SECRET    OAuth client secret
-#   CWS_REFRESH_TOKEN    refresh token for the dashboard owner's Google account
-# See docs/publishing.md for the one-time setup that produces these.
+# Manual upload via GitHub Actions UI:
+#   Actions -> Release -> "Run workflow" -> optionally choose auto-publish (submit for review)
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   CHROME_EXTENSION_ID  (or CWS_EXTENSION_ID)  the 32-char id from the Developer Dashboard
+#   CHROME_PUBLISHER_ID  (or CWS_PUBLISHER_ID)  the publisher ID from CWS Developer Dashboard
+#   CHROME_CLIENT_ID     (or CWS_CLIENT_ID)     OAuth client id (Google Cloud → APIs & Services)
+#   CHROME_CLIENT_SECRET (or CWS_CLIENT_SECRET) OAuth client secret
+#   CHROME_REFRESH_TOKEN (or CWS_REFRESH_TOKEN) refresh token for CWS API
+# See docs/publishing.md for details.
 
 name: Release
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      auto_publish:
+        description: 'Auto-publish (submit for review after upload)'
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -26,38 +37,49 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --include=optional
       - run: npx tsc --noEmit
       - run: npm test
 
-      - name: Check tag matches package.json version
+      - name: Resolve and verify version
         run: |
           PKG="v$(node -p "require('./package.json').version")"
-          if [ "$PKG" != "${GITHUB_REF_NAME}" ]; then
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "$PKG" != "${GITHUB_REF_NAME}" ]; then
             echo "Tag ${GITHUB_REF_NAME} does not match package.json ${PKG}"; exit 1
+          fi
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            echo "VERSION=${PKG}" >> $GITHUB_ENV
+          else
+            echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_ENV
           fi
 
       - run: npm run build:all
 
       - name: Package zips
         run: |
-          (cd dist/chrome  && zip -qr ../omnijump-chrome-${GITHUB_REF_NAME}.zip .)
-          (cd dist/firefox && zip -qr ../omnijump-firefox-${GITHUB_REF_NAME}.zip .)
+          (cd dist/chrome  && zip -qr ../omnijump-chrome-${VERSION}.zip .)
+          (cd dist/firefox && zip -qr ../omnijump-firefox-${VERSION}.zip .)
 
       - name: Upload and publish to Chrome Web Store
         env:
-          EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
-          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
-          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID || secrets.CWS_EXTENSION_ID }}
+          PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID || secrets.CWS_PUBLISHER_ID }}
+          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID || secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET || secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN || secrets.CWS_REFRESH_TOKEN }}
         run: |
-          npx --yes chrome-webstore-upload-cli@3 upload \
-            --source dist/omnijump-chrome-${GITHUB_REF_NAME}.zip \
-            --auto-publish
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.auto_publish }}" = "false" ]; then
+            npx --yes chrome-webstore-upload-cli@latest upload \
+              --source dist/omnijump-chrome-${VERSION}.zip
+          else
+            npx --yes chrome-webstore-upload-cli@latest \
+              --source dist/omnijump-chrome-${VERSION}.zip
+          fi
 
       - name: Attach zips to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.zip
