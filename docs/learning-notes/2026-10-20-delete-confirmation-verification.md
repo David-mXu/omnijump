@@ -44,7 +44,9 @@ In fast-paced keyboard workflows, an accidental press of `d` while navigating wi
    - Added `color-scheme: dark` to `body.dark` and `color-scheme: light` to `body`.
 4. **Live Dark Mode Sync in [`src/popup.ts`](file:///home/davidxu/Programming/Extensions/OmniJump/src/popup.ts) & [`src/onboarding.ts`](file:///home/davidxu/Programming/Extensions/OmniJump/src/onboarding.ts)**:
    - Registered `chrome.storage.onChanged` listener for `SETTINGS_KEY` to dynamically toggle `body.classList.toggle('dark', newSettings?.darkMode ?? false)`.
-5. **DOM Mocking & Automated Unit Testing**:
+5. **Favicon Tab Icon Linking Across Extension Surfaces**:
+   - Injected explicit `<link rel="icon" type="image/png" sizes="32x32" href="../images/icon32.png" />` and `16x16` tags into [`src/options.html`](file:///home/davidxu/Programming/Extensions/OmniJump/src/options.html), [`src/onboarding.html`](file:///home/davidxu/Programming/Extensions/OmniJump/src/onboarding.html), [`src/sidepanel.html`](file:///home/davidxu/Programming/Extensions/OmniJump/src/sidepanel.html), and [`src/popup.html`](file:///home/davidxu/Programming/Extensions/OmniJump/src/popup.html), ensuring browser tabs display the official OmniJump icon rather than blank sheet or generic puzzle piece fallbacks.
+6. **DOM Mocking & Automated Unit Testing**:
    - Created in-memory DOM representation in [`src/test/dom-mock.ts`](file:///home/davidxu/Programming/Extensions/OmniJump/src/test/dom-mock.ts) supporting element tree hierarchy, class manipulation, event dispatching, and selector matching.
    - Created [`src/ui.test.ts`](file:///home/davidxu/Programming/Extensions/OmniJump/src/ui.test.ts) covering:
      1. Two-step deletion requirement: first click arms pending state and renders confirmation prompt; second click executes deletion and renders Undo toast.
