@@ -7,157 +7,268 @@
     <style>
       /* Shared tokens & components live in theme.css (imported via onboarding.ts).
          Only onboarding-page layout lives here. */
-      body { margin: 0 auto; max-width: 620px; padding: 0 var(--s6) 56px; }
+      body {
+        margin: 0;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        min-height: 100vh;
+        background: var(--background);
+        color: var(--foreground);
+      }
+
+      .onboarding-container {
+        width: 100%;
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 48px var(--s5) 64px;
+        box-sizing: border-box;
+      }
 
       header {
-        display: flex; align-items: center; gap: var(--s3);
-        padding: 40px 0 var(--s3);
+        display: flex;
+        align-items: center;
+        gap: var(--s3);
+        margin-bottom: var(--s3);
       }
-      .brand-mark { color: var(--accent); display: flex; }
-      header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0; color: var(--text); }
+      .brand-mark { color: var(--accent); display: flex; flex-shrink: 0; }
+      header h1 {
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        margin: 0;
+        color: var(--foreground);
+      }
       header h1 b { color: var(--accent); }
 
-      .lede { font-size: 14px; color: var(--text-2); line-height: 1.6; margin: 0 0 var(--s5); }
-
-      /* ── Mock address bar ─────────────────────────────────────────────────── */
-      .omnibar-demo {
-        display: flex; align-items: center; gap: var(--s2);
-        border: 1px solid var(--border-strong); border-radius: 999px;
-        padding: 9px var(--s4); background: var(--surface);
-        font-size: 14px; color: var(--text-2); margin-bottom: var(--s2);
+      .lede {
+        font-size: 15px;
+        color: var(--muted-foreground);
+        line-height: 1.6;
+        margin: 0 0 var(--s5);
       }
-      .omnibar-demo svg { flex-shrink: 0; color: var(--text-3); }
-      .omnibar-demo .typed { font-family: var(--font-mono); color: var(--text); font-weight: 600; }
+
+      /* ── Interactive Omnibar preview ───────────────────────────────────────── */
+      .demo-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--r-xl);
+        padding: var(--s4) var(--s5);
+        margin-bottom: var(--s6);
+        box-shadow: var(--shadow-sm);
+      }
+      .omnibar-demo {
+        display: flex;
+        align-items: center;
+        gap: var(--s2);
+        border: 1px solid var(--border-strong);
+        border-radius: 999px;
+        padding: 10px var(--s4);
+        background: var(--surface);
+        font-size: 14px;
+        color: var(--foreground);
+        margin-bottom: var(--s2);
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+      }
+      .omnibar-demo svg { flex-shrink: 0; color: var(--muted-foreground); }
+      .omnibar-demo .typed {
+        font-family: var(--font-mono);
+        color: var(--foreground);
+        font-weight: 600;
+      }
       .omnibar-demo .cursor {
-        display: inline-block; width: 1px; height: 16px; background: var(--accent);
-        vertical-align: text-bottom; animation: blink 1.1s steps(1) infinite;
+        display: inline-block;
+        width: 2px;
+        height: 16px;
+        background: var(--accent);
+        vertical-align: text-bottom;
+        animation: blink 1.1s steps(1) infinite;
       }
       @keyframes blink { 50% { opacity: 0; } }
       .omnibar-result {
-        display: flex; align-items: center; gap: var(--s2);
-        font-size: 13px; color: var(--text-2); padding-left: var(--s4);
-        margin-bottom: var(--s6);
+        display: flex;
+        align-items: center;
+        gap: var(--s2);
+        font-size: 13px;
+        color: var(--muted-foreground);
+        padding-left: var(--s3);
       }
       .omnibar-result .arrow { color: var(--accent); font-weight: 700; }
 
       /* ── Steps ────────────────────────────────────────────────────────────── */
-      .step { display: flex; gap: var(--s4); margin-bottom: var(--s5); }
-      .step-num {
-        flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
-        background: var(--accent); color: var(--on-accent);
-        display: flex; align-items: center; justify-content: center;
-        font-size: 13px; font-weight: 700;
+      .step {
+        display: flex;
+        gap: var(--s4);
+        margin-bottom: var(--s4);
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        padding: var(--s4);
+        box-shadow: var(--shadow-sm);
+        transition: border-color var(--t);
       }
-      .step h2 { font-size: 15px; font-weight: 600; margin: 2px 0 var(--s1); color: var(--text); }
-      .step p { font-size: 13px; color: var(--text-2); line-height: 1.6; margin: 0; }
+      .step:hover {
+        border-color: var(--border-strong);
+      }
+      .step-num {
+        flex-shrink: 0;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: var(--on-accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 700;
+        box-shadow: 0 1px 2px rgba(22, 104, 201, 0.25);
+      }
+      .step h2 {
+        font-size: 15px;
+        font-weight: 600;
+        margin: 2px 0 var(--s1);
+        color: var(--foreground);
+      }
+      .step p {
+        font-size: 13px;
+        color: var(--muted-foreground);
+        line-height: 1.6;
+        margin: 0;
+      }
+      .step p b { color: var(--foreground); }
 
       /* ── Tips card ────────────────────────────────────────────────────────── */
       .tips {
-        border: 1px solid var(--border); border-radius: var(--r-md);
-        background: var(--surface); padding: var(--s4) var(--s5);
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        background: var(--secondary);
+        padding: var(--s4) var(--s5);
+        margin-top: var(--s5);
         margin-bottom: var(--s5);
       }
       .tips h2 {
-        font-size: 12px; font-weight: 600; margin: 0 0 var(--s3); color: var(--text);
-        text-transform: uppercase; letter-spacing: 0.04em;
+        font-size: 11px;
+        font-weight: 600;
+        margin: 0 0 var(--s3);
+        color: var(--muted-foreground);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
       }
       .tips ul { margin: 0; padding: 0; list-style: none; }
       .tips li {
-        font-size: 13px; color: var(--text-2); line-height: 1.6;
-        padding: var(--s1) 0; border: none;
+        font-size: 13px;
+        color: var(--muted-foreground);
+        line-height: 1.6;
+        padding: var(--s1) 0;
+        border: none;
       }
       .tips li:hover { background: none; }
-      .tips b { color: var(--text); font-weight: 600; }
+      .tips b { color: var(--foreground); font-weight: 600; }
 
-      .engines { font-size: 12px; color: var(--text-3); line-height: 1.6; margin: 0 0 var(--s5); }
+      .engines {
+        font-size: 12px;
+        color: var(--muted-foreground);
+        line-height: 1.6;
+        margin: 0 0 var(--s5);
+      }
 
-      .cta-row { display: flex; align-items: center; gap: var(--s3); }
-      #closeBtn { padding: 9px 18px; font-size: 14px; }
-      .cta-row span { font-size: 12px; color: var(--text-3); }
+      .cta-row {
+        display: flex;
+        align-items: center;
+        gap: var(--s3);
+        margin-top: var(--s5);
+      }
+      #closeBtn { padding: 10px 22px; font-size: 14px; font-weight: 600; }
+      .cta-row span { font-size: 12px; color: var(--muted-foreground); }
     </style>
   </head>
   <body>
-    <header>
-      <span class="brand-mark" aria-hidden="true">
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
-          <rect x="3" y="3" width="18" height="18" rx="5" fill="currentColor"/>
-          <path d="M12 17.5A5.5 5.5 0 1 1 17.5 12" stroke="#fff" stroke-width="1.8"
-                stroke-linecap="round" fill="none"/>
-          <path d="M14.5 9.5 l3 2.5 -3.5 1" stroke="#fff" stroke-width="1.8"
-                stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </span>
-      <h1>Welcome to Omni<b>Jump</b></h1>
-    </header>
+    <div class="onboarding-container">
+      <header>
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="3" width="18" height="18" rx="5" fill="currentColor"/>
+            <path d="M12 17.5A5.5 5.5 0 1 1 17.5 12" stroke="#fff" stroke-width="1.8"
+                  stroke-linecap="round" fill="none"/>
+            <path d="M14.5 9.5 l3 2.5 -3.5 1" stroke="#fff" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <h1>Welcome to Omni<b>Jump</b></h1>
+      </header>
 
-    <p class="lede">
-      Give any page a short keyword, then type that keyword in your address bar
-      to jump straight to it. Here's the whole trick:
-    </p>
+      <p class="lede">
+        Give any page a short keyword, then type that keyword in your address bar
+        to jump straight to it. Here's how it works:
+      </p>
 
-    <div class="omnibar-demo" aria-hidden="true">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-      <span class="typed">gh</span><span class="cursor"></span>
-    </div>
-    <div class="omnibar-result" aria-hidden="true">
-      <span class="arrow">→</span> jumps to <span class="key">github.com</span>
-    </div>
-
-    <div class="step">
-      <div class="step-num">1</div>
-      <div>
-        <h2>Save a keyword</h2>
-        <p>
-          Click the OmniJump icon in your toolbar<span id="popupShortcutHint"></span> —
-          the current page and a suggested keyword are pre-filled. You can also
-          right-click any page or link and choose <b>Save Page as Shortcut</b>.
-        </p>
+      <div class="demo-card">
+        <div class="omnibar-demo" aria-hidden="true">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <span class="typed">gh</span><span class="cursor"></span>
+        </div>
+        <div class="omnibar-result" aria-hidden="true">
+          <span class="arrow">→</span> jumps straight to <span class="key">github.com</span>
+        </div>
       </div>
-    </div>
 
-    <div class="step">
-      <div class="step-num">2</div>
-      <div>
-        <h2>Type it in the address bar</h2>
-        <p>
-          Type the keyword — like <span class="key">gh</span> — where you'd
-          normally search, and press <b>Enter</b>. That's it. You jump.
-        </p>
+      <div class="step">
+        <div class="step-num">1</div>
+        <div>
+          <h2>Save a keyword</h2>
+          <p>
+            Click the OmniJump icon in your toolbar<span id="popupShortcutHint"></span> —
+            the current page and a suggested keyword are pre-filled. You can also
+            right-click any page or link and choose <b>Save Page as Shortcut</b>.
+          </p>
+        </div>
       </div>
-    </div>
 
-    <div class="step">
-      <div class="step-num">3</div>
-      <div>
-        <h2>Go further</h2>
-        <p>
-          <b>Search shortcuts</b> take an argument: save
-          <span class="key">yt</span> with a <b>%s</b> template and
-          <span class="key">yt lofi beats</span> searches YouTube directly.
-          <b>Bundles</b> open several tabs at once — perfect for a morning routine.
-        </p>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div>
+          <h2>Type it in the address bar</h2>
+          <p>
+            Type the keyword — like <span class="key">gh</span> — where you'd
+            normally search, and press <b>Enter</b>. That's it. You jump.
+          </p>
+        </div>
       </div>
-    </div>
 
-    <div class="tips">
-      <h2>Good to know</h2>
-      <ul>
-        <li><b>Can't remember a keyword?</b> Type <span class="key">oj</span> then a space in the address bar to browse and autocomplete your shortcuts.</li>
-        <li><b>Keyword also a real search?</b> Add any second word (except on search shortcuts) and OmniJump stays out of the way.</li>
-        <li><b>Manage everything</b> in the side panel — press <span class="key" id="panelShortcut">Ctrl+Shift+S</span> or click "Open full panel" in the popup.</li>
-      </ul>
-    </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div>
+          <h2>Go further</h2>
+          <p>
+            <b>Search shortcuts</b> take an argument: save
+            <span class="key">yt</span> with a <b>%s</b> template and
+            <span class="key">yt lofi beats</span> searches YouTube directly.
+            <b>Bundles</b> open several tabs at once — perfect for a morning routine.
+          </p>
+        </div>
+      </div>
 
-    <p class="engines">
-      Jumping works when your browser's default search engine is Google, Bing,
-      DuckDuckGo, Brave, Kagi, Ecosia, or Startpage. The
-      <span class="key">oj</span> keyword works with any search engine.
-    </p>
+      <div class="tips">
+        <h2>Good to know</h2>
+        <ul>
+          <li><b>Can't remember a keyword?</b> Type <span class="key">oj</span> then a space in the address bar to browse and autocomplete your shortcuts.</li>
+          <li><b>Keyword also a real search?</b> Add any second word (except on search shortcuts) and OmniJump stays out of the way.</li>
+          <li><b>Manage everything</b> in the side panel — press <span class="key" id="panelShortcut">Ctrl+Shift+S</span> or click "Open full panel" in the popup.</li>
+        </ul>
+      </div>
 
-    <div class="cta-row">
-      <button type="button" id="closeBtn" class="btn-primary">Got it — start jumping</button>
-      <span>You can reopen the panel any time from the toolbar icon.</span>
+      <p class="engines">
+        Jumping works when your browser's default search engine is Google, Bing,
+        DuckDuckGo, Brave, Kagi, Ecosia, or Startpage. The
+        <span class="key">oj</span> keyword works with any search engine.
+      </p>
+
+      <div class="cta-row">
+        <button type="button" id="closeBtn" class="btn-primary">Got it — start jumping</button>
+        <span>You can reopen the panel any time from the toolbar icon.</span>
+      </div>
     </div>
 
     <script type="module" src="./onboarding.ts"></script>
