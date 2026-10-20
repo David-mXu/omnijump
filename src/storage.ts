@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, Shortcut, ShortcutStore, UserSettings } from './types';
+import { DEFAULT_SETTINGS, STARTER_SHORTCUTS, Shortcut, ShortcutStore, UserSettings } from './types';
 
 export const SETTINGS_KEY = 'omnibar_settings';
 export const SHORTCUT_PREFIX = 'omnibar_s_';
@@ -233,4 +233,28 @@ export async function cleanupStaleShortcuts(): Promise<void> {
   if (toDelete.length > 0) ops.push(chrome.storage.sync.remove(toDelete));
   if (Object.keys(toGrace).length > 0) ops.push(chrome.storage.sync.set(toGrace));
   await Promise.all(ops);
+}
+
+export async function seedStarterShortcuts(overwriteExisting = false): Promise<number> {
+  const store = await getStore();
+  const now = Date.now();
+  const items: Record<string, Shortcut> = {};
+  let addedCount = 0;
+
+  for (const s of STARTER_SHORTCUTS) {
+    const key = normalizeKey(s.key);
+    if (!overwriteExisting && store.shortcuts[key]) continue;
+    items[`${SHORTCUT_PREFIX}${key}`] = {
+      ...s,
+      key,
+      createdAt: now,
+      useCount: 0,
+    };
+    addedCount++;
+  }
+
+  if (addedCount > 0) {
+    await chrome.storage.sync.set(items);
+  }
+  return addedCount;
 }

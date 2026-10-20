@@ -14,8 +14,9 @@ import {
   migrateFromLegacyStorage,
   getDismissedHosts,
   addDismissedHost,
+  seedStarterShortcuts,
 } from './storage';
-import { DEFAULT_SETTINGS } from './types';
+import { DEFAULT_SETTINGS, STARTER_SHORTCUTS } from './types';
 
 let syncStore: Record<string, unknown>;
 let localStore: Record<string, unknown>;
@@ -254,5 +255,27 @@ describe('cleanupStaleShortcuts', () => {
     expect(store.shortcuts.fresh.lastUsed).toBeUndefined();
     expect(store.shortcuts.legacy.lastUsed).toBeUndefined();
     expect(typeof store.shortcuts.legacy.createdAt).toBe('number');
+  });
+});
+
+describe('seedStarterShortcuts', () => {
+  it('seeds all starter shortcuts into an empty store', async () => {
+    const added = await seedStarterShortcuts();
+    expect(added).toBe(STARTER_SHORTCUTS.length);
+    const store = await getStore();
+    expect(Object.keys(store.shortcuts).length).toBe(STARTER_SHORTCUTS.length);
+    expect(store.shortcuts.gh).toBeDefined();
+    expect(store.shortcuts.yt).toBeDefined();
+    expect(store.shortcuts.chat).toBeDefined();
+    expect(store.shortcuts.claude).toBeDefined();
+    expect(store.shortcuts.maps).toBeDefined();
+  });
+
+  it('does not overwrite existing shortcuts by default', async () => {
+    await upsertShortcut({ key: 'gh', url: 'https://custom-github.com', type: 'redirect' });
+    const added = await seedStarterShortcuts(false);
+    expect(added).toBe(STARTER_SHORTCUTS.length - 1);
+    const store = await getStore();
+    expect(store.shortcuts.gh.url).toBe('https://custom-github.com');
   });
 });

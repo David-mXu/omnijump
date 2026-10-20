@@ -1,7 +1,7 @@
 import { isSearchEngineUrl, rebuildDynamicRules } from './dnr';
 import { fuzzyFilter } from './fuzzy';
 import { IS_FIREFOX, openSidePanel } from './platform';
-import { SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, cleanupStaleShortcuts, getDismissedHosts, getStore, migrateFromLegacyStorage, normalizeKey, touchShortcut, upsertShortcut } from './storage';
+import { SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, cleanupStaleShortcuts, getDismissedHosts, getStore, migrateFromLegacyStorage, normalizeKey, seedStarterShortcuts, touchShortcut, upsertShortcut } from './storage';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
 import { Shortcut, ShortcutStore, Suggestion } from './types';
 import { startDevReload } from './dev-reload';
@@ -220,6 +220,7 @@ chrome.runtime.onStartup.addListener(async () => {
 
 chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install') {
+    await seedStarterShortcuts();
     chrome.tabs.create({ url: chrome.runtime.getURL('src/onboarding.html') });
   }
 

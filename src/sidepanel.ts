@@ -1,7 +1,7 @@
 import './theme.css';
 import { icon } from './icons';
 import { IS_FIREFOX } from './platform';
-import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, clearAllStats, deleteShortcut, deleteShortcuts, getStore, normalizeKey, renameShortcut, restoreShortcuts, saveSettings, upsertShortcut } from './storage';
+import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, clearAllStats, deleteShortcut, deleteShortcuts, getStore, normalizeKey, renameShortcut, restoreShortcuts, saveSettings, seedStarterShortcuts, upsertShortcut } from './storage';
 import { buildShortcutRow, hoveredRow, normalizeUrl, openShortcut, renderOverwriteConfirm, savedStatusMessage, showUndoToast } from './ui';
 import { deriveSearchFallbackUrl, suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
 import { fuzzyFilter } from './fuzzy';
@@ -899,6 +899,22 @@ importFile.addEventListener('change', async () => {
     : `Imported ${imported} shortcuts.`;
   importFile.value = '';
 });
+
+const loadStarterBtn = document.getElementById('loadStarterBtn') as HTMLButtonElement | null;
+const loadStarterSettingsBtn = document.getElementById('loadStarterSettingsBtn') as HTMLButtonElement | null;
+
+async function handleLoadStarter(): Promise<void> {
+  const added = await seedStarterShortcuts(false);
+  const msg = added === 0
+    ? 'All starter shortcuts are already added.'
+    : `Added ${added} starter shortcut${added === 1 ? '' : 's'}.`;
+  dataStatusEl.textContent = msg;
+  dataStatusEl.className = 'form-status success';
+  await refresh();
+}
+
+loadStarterBtn?.addEventListener('click', handleLoadStarter);
+loadStarterSettingsBtn?.addEventListener('click', handleLoadStarter);
 
 // ── Keyboard navigation ───────────────────────────────────────────────────────
 document.addEventListener('keydown', (e) => {
