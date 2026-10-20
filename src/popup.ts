@@ -1,6 +1,6 @@
 import './theme.css';
 import { IS_FIREFOX, openSidePanel } from './platform';
-import { addDismissedHost, getStore, normalizeKey, upsertShortcut } from './storage';
+import { SETTINGS_KEY, addDismissedHost, getStore, normalizeKey, upsertShortcut } from './storage';
 import { suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
 import { Suggestion } from './types';
 import { normalizeUrl, renderOverwriteConfirm, savedStatusMessage } from './ui';
@@ -156,4 +156,11 @@ document.getElementById('openPanel')?.addEventListener('click', async () => {
     openSidePanel(tab.id);
   }
   window.close();
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync' && SETTINGS_KEY in changes) {
+    const newSettings = changes[SETTINGS_KEY]?.newValue as { darkMode?: boolean } | undefined;
+    document.body.classList.toggle('dark', newSettings?.darkMode ?? false);
+  }
 });

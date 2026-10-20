@@ -97,9 +97,60 @@ export function displayUrl(url: string): string {
   try { return new URL(url).hostname; } catch { return url; }
 }
 
+// ── Delete confirmation state ('d' key / click verification) ──────────────────
+export let pendingDeleteKey: string | null = null;
+let pendingDeleteRow: HTMLLIElement | null = null;
+let pendingDeleteTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function cancelPendingDelete(): void {
+  if (pendingDeleteTimer !== null) {
+    clearTimeout(pendingDeleteTimer);
+    pendingDeleteTimer = null;
+  }
+  if (pendingDeleteRow) {
+    pendingDeleteRow.classList.remove('pending-delete');
+    const btn = pendingDeleteRow.querySelector<HTMLButtonElement>('.btn-icon.danger');
+    if (btn) {
+      btn.classList.remove('confirm-delete');
+      btn.title = 'Delete';
+      btn.setAttribute('aria-label', `Delete ${pendingDeleteRow.dataset.key ?? ''}`);
+    }
+    pendingDeleteRow = null;
+  }
+  pendingDeleteKey = null;
+  if (typeof document !== 'undefined') {
+    document.querySelector('.delete-confirm-toast')?.remove();
+  }
+}
+
+export function showDeleteConfirmToast(key: string, onCancel: () => void): void {
+  if (typeof document === 'undefined') return;
+  document.querySelector('.delete-confirm-toast')?.remove();
+  document.querySelector('.undo-toast')?.remove();
+
+  const toast = document.createElement('div');
+  toast.className = 'delete-confirm-toast';
+  toast.setAttribute('role', 'alert');
+
+  const text = document.createElement('span');
+  text.innerHTML = `Delete <strong>${key}</strong>? Press <kbd class="kbd">d</kbd> again to confirm`;
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'confirm-cancel-btn';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', () => {
+    onCancel();
+  });
+
+  toast.append(text, cancelBtn);
+  document.body.appendChild(toast);
+}
+
 let editingRow: HTMLLIElement | null = null;
 
 export function cancelRowEdit(): void {
+  cancelPendingDelete();
   if (editingRow) {
     const row = editingRow;
     row.classList.remove('editing');
@@ -108,13 +159,35 @@ export function cancelRowEdit(): void {
   }
 }
 
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && editingRow) {
-    cancelRowEdit();
-  }
-});
+if (typeof document !== 'undefined') {
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (pendingDeleteKey) {
+        cancelPendingDelete();
+        return;
+      }
+      if (editingRow) {
+        cancelRowEdit();
+      }
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (pendingDeleteKey) {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        !target.closest('.delete-confirm-toast') &&
+        !target.closest('.pending-delete')
+      ) {
+        cancelPendingDelete();
+      }
+    }
+  });
+}
 
 function openEdit(li: HTMLLIElement): void {
+  cancelPendingDelete();
   if (editingRow && editingRow !== li) editingRow.classList.remove('editing');
   editingRow = li;
   li.classList.add('editing');
@@ -262,13 +335,31 @@ export function buildShortcutRow(
   deleteBtn.title = 'Delete';
   deleteBtn.setAttribute('aria-label', `Delete ${shortcut.key}`);
   deleteBtn.innerHTML = icon('trash');
-  deleteBtn.addEventListener('click', async () => {
-    await deleteShortcut(shortcut.key);
-    await onRender();
-    showUndoToast(`Deleted "${shortcut.key}"`, async () => {
-      await restoreShortcuts([shortcut]);
+  deleteBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (pendingDeleteKey === shortcut.key) {
+      cancelPendingDelete();
+      await deleteShortcut(shortcut.key);
       await onRender();
-    });
+      showUndoToast(`Deleted "${shortcut.key}"`, async () => {
+        await restoreShortcuts([shortcut]);
+        await onRender();
+      });
+    } else {
+      cancelPendingDelete();
+      pendingDeleteKey = shortcut.key;
+      pendingDeleteRow = li;
+      li.classList.add('pending-delete');
+      deleteBtn.classList.add('confirm-delete');
+      deleteBtn.title = `Press 'd' again to confirm`;
+      deleteBtn.setAttribute('aria-label', `Press 'd' again to confirm deleting ${shortcut.key}`);
+      showDeleteConfirmToast(shortcut.key, () => {
+        cancelPendingDelete();
+      });
+      pendingDeleteTimer = setTimeout(() => {
+        cancelPendingDelete();
+      }, 4000);
+    }
   });
 
   if (onAlias && shortcut.type !== 'bundle') {

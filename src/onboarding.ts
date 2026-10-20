@@ -1,6 +1,6 @@
 import './theme.css';
 import { IS_FIREFOX } from './platform';
-import { getStore } from './storage';
+import { SETTINGS_KEY, getStore } from './storage';
 
 async function init(): Promise<void> {
   try {
@@ -29,3 +29,10 @@ document.getElementById('closeBtn')?.addEventListener('click', () => {
 });
 
 init();
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync' && SETTINGS_KEY in changes) {
+    const newSettings = changes[SETTINGS_KEY]?.newValue as { darkMode?: boolean } | undefined;
+    document.body.classList.toggle('dark', newSettings?.darkMode ?? false);
+  }
+});

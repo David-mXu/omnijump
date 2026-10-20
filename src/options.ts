@@ -2,7 +2,7 @@ import './theme.css';
 import { icon } from './icons';
 import { IS_FIREFOX } from './platform';
 import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, clearAllStats, deleteShortcut, deleteShortcuts, getStore, normalizeKey, renameShortcut, restoreShortcuts, saveSettings, seedStarterShortcuts, upsertShortcut } from './storage';
-import { buildShortcutRow, normalizeUrl, openShortcut, renderOverwriteConfirm, savedStatusMessage, showUndoToast } from './ui';
+import { buildShortcutRow, cancelPendingDelete, normalizeUrl, openShortcut, pendingDeleteKey, renderOverwriteConfirm, savedStatusMessage, showUndoToast } from './ui';
 import { deriveSearchFallbackUrl, suggestKeyFromUrl, uniqueKey } from './suggest';
 import { fuzzyFilter } from './fuzzy';
 import { Shortcut, UserSettings } from './types';
@@ -140,6 +140,7 @@ function renderSettings(): void {
 }
 
 async function refresh(): Promise<void> {
+  cancelPendingDelete();
   const store = await getStore();
   // Most-used first, so the shortcuts people actually reach for stay on top.
   shortcutCache = Object.values(store.shortcuts).sort(
@@ -164,6 +165,7 @@ filterInput.addEventListener('input', renderList);
 
 // ── Multi-select ──────────────────────────────────────────────────────────────
 selectToggleBtn.addEventListener('click', () => {
+  cancelPendingDelete();
   const entering = !listEl.classList.contains('selecting');
   listEl.classList.toggle('selecting', entering);
   selectToggleBtn.textContent = entering ? 'Cancel' : 'Select';
@@ -821,6 +823,10 @@ loadStarterSettingsBtn?.addEventListener('click', handleLoadStarter);
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     let handled = false;
+    if (pendingDeleteKey) {
+      cancelPendingDelete();
+      handled = true;
+    }
     if (!tabPickerEl.hidden) {
       tabPickerEl.hidden = true;
       handled = true;
@@ -849,17 +855,21 @@ document.addEventListener('keydown', (e) => {
   const idx = focused ? items.indexOf(focused) : -1;
 
   if (e.key === 'j' || e.key === 'ArrowDown') {
+    if (pendingDeleteKey) cancelPendingDelete();
     e.preventDefault();
     items[Math.min(Math.max(idx, -1) + 1, items.length - 1)]?.focus();
   } else if (e.key === 'k' || e.key === 'ArrowUp') {
+    if (pendingDeleteKey) cancelPendingDelete();
     e.preventDefault();
     items[Math.max(idx - 1, 0)]?.focus();
   } else if ((e.key === 'Enter' || e.key === 'l') && focused) {
+    if (pendingDeleteKey) cancelPendingDelete();
     // Open in a new tab: tabs.update without an id would navigate this options page away.
     const shortcut = shortcutCache.find(s => s.key === focused.dataset.key);
     if (shortcut) openShortcut(shortcut);
     else if (focused.dataset.url) chrome.tabs.create({ url: focused.dataset.url });
   } else if (e.key === 'e' && focused) {
+    if (pendingDeleteKey) cancelPendingDelete();
     focused.querySelector<HTMLButtonElement>('.edit-btn')?.click();
   } else if ((e.key === 'd' || e.key === 'Delete') && focused) {
     e.preventDefault();
