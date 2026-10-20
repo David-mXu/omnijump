@@ -53,22 +53,33 @@ export default function createManifest(target: BrowserTarget): Manifest {
       ? {
           '_execute_sidebar_action': {
             suggested_key: {
-              default: 'Ctrl+Shift+S',
-              mac: 'MacCtrl+Shift+S',
+              default: 'Alt+Shift+A',
+              mac: 'Alt+Shift+A',
             },
             description: 'Open OmniJump side panel',
           },
           '_execute_action': {
+            suggested_key: {
+              default: 'Alt+Shift+S',
+              mac: 'Alt+Shift+S',
+            },
             description: 'Open OmniJump popup',
           },
         }
       : {
           'open-side-panel': {
             suggested_key: {
-              default: 'Ctrl+Shift+S',
-              mac: 'MacCtrl+Shift+S',
+              default: 'Alt+Shift+A',
+              mac: 'Alt+Shift+A',
             },
             description: 'Open OmniJump side panel',
+          },
+          '_execute_action': {
+            suggested_key: {
+              default: 'Alt+Shift+S',
+              mac: 'Alt+Shift+S',
+            },
+            description: 'Open OmniJump popup',
           },
         },
   };
