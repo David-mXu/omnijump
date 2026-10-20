@@ -28,7 +28,7 @@ export interface ShortcutStore {
 
 export const DEFAULT_SETTINGS: UserSettings = {
   maxShortcuts: 500,
-  filterThreshold: 25,
+  filterThreshold: 10,
   staleAutoDelete: true,
   staleDays: 90,
   darkMode: false,

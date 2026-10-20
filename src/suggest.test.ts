@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { normalizeKey } from './storage';
-import { suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
+import { deriveSearchFallbackUrl, getUrlAncestors, normalizeUrl, suggestKeyFromUrl, uniqueKey } from './suggest';
 
 describe('normalizeKey', () => {
   it('lowercases and trims', () => {
@@ -81,5 +81,66 @@ describe('getUrlAncestors', () => {
   });
   it('returns empty array for an invalid URL', () => {
     expect(getUrlAncestors('not a url')).toEqual([]);
+  });
+});
+
+describe('normalizeUrl', () => {
+  it('prepends https:// when no protocol is specified', () => {
+    expect(normalizeUrl('example.com')).toBe('https://example.com');
+    expect(normalizeUrl('  github.com/search  ')).toBe('https://github.com/search');
+  });
+
+  it('preserves existing http:// and https://', () => {
+    expect(normalizeUrl('http://example.com')).toBe('http://example.com');
+    expect(normalizeUrl('https://example.com')).toBe('https://example.com');
+  });
+
+  it('blocks non-http(s) schemes', () => {
+    expect(normalizeUrl('javascript:alert(1)')).toBe('');
+    expect(normalizeUrl('data:text/html,test')).toBe('');
+    expect(normalizeUrl('file:///etc/passwd')).toBe('');
+  });
+
+  it('handles empty input', () => {
+    expect(normalizeUrl('')).toBe('');
+    expect(normalizeUrl('   ')).toBe('');
+  });
+});
+
+describe('deriveSearchFallbackUrl', () => {
+  it('uses explicit fallback URL when valid', () => {
+    expect(deriveSearchFallbackUrl('https://github.com/search?q=%s', 'github.com/explore'))
+      .toBe('https://github.com/explore');
+  });
+
+  it('removes query param containing %s and strips dangling ?', () => {
+    expect(deriveSearchFallbackUrl('https://github.com/search?q=%s'))
+      .toBe('https://github.com/search');
+    expect(deriveSearchFallbackUrl('https://docs.google.com/document/u/0/?q=%s'))
+      .toBe('https://docs.google.com/document/u/0/');
+  });
+
+  it('preserves other query parameters when removing %s param', () => {
+    expect(deriveSearchFallbackUrl('https://site.com/search?category=all&q=%s'))
+      .toBe('https://site.com/search?category=all');
+    expect(deriveSearchFallbackUrl('https://site.com/search?q=%s&category=all'))
+      .toBe('https://site.com/search?category=all');
+  });
+
+  it('cleans %s from URL hash', () => {
+    expect(deriveSearchFallbackUrl('https://site.com/search#%s'))
+      .toBe('https://site.com/search');
+    expect(deriveSearchFallbackUrl('https://site.com/search#query=%s'))
+      .toBe('https://site.com/search');
+  });
+
+  it('cleans %s from pathname', () => {
+    expect(deriveSearchFallbackUrl('https://dictionary.com/browse/%s'))
+      .toBe('https://dictionary.com/browse/');
+  });
+
+  it('adds https:// if template lacks protocol', () => {
+    expect(deriveSearchFallbackUrl('github.com/search?q=%s'))
+      .toBe('https://github.com/search');
   });
 });

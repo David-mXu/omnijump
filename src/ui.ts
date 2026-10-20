@@ -1,6 +1,9 @@
 import { deleteShortcut, normalizeKey, renameShortcut, restoreShortcuts, touchShortcut, upsertShortcut } from './storage';
 import { icon } from './icons';
 import { Shortcut } from './types';
+import { deriveSearchFallbackUrl, normalizeUrl } from './suggest';
+
+export { deriveSearchFallbackUrl, normalizeUrl };
 
 export let hoveredRow: HTMLLIElement | null = null;
 
@@ -90,20 +93,26 @@ export function openShortcut(shortcut: Shortcut): void {
   void touchShortcut(shortcut.key);
 }
 
-export function normalizeUrl(input: string): string {
-  const s = input.trim();
-  if (!s) return s;
-  if (/^https?:\/\//i.test(s)) return s;
-  // Block non-http(s) schemes (javascript:, data:, vbscript:, file:, blob:, etc.)
-  if (/^[a-z][a-z0-9+\-.]*:/i.test(s)) return '';
-  return `https://${s}`;
-}
-
 export function displayUrl(url: string): string {
   try { return new URL(url).hostname; } catch { return url; }
 }
 
 let editingRow: HTMLLIElement | null = null;
+
+export function cancelRowEdit(): void {
+  if (editingRow) {
+    const row = editingRow;
+    row.classList.remove('editing');
+    editingRow = null;
+    row.focus();
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && editingRow) {
+    cancelRowEdit();
+  }
+});
 
 function openEdit(li: HTMLLIElement): void {
   if (editingRow && editingRow !== li) editingRow.classList.remove('editing');
@@ -141,7 +150,7 @@ async function saveEdit(
         statusEl.textContent = 'Search URL must include %s.';
         return;
       }
-      const fallbackUrl = normalizeUrl(urlOrLabel) || template.replace('%s', '');
+      const fallbackUrl = deriveSearchFallbackUrl(template, urlOrLabel);
       updated = { ...original, key: newKey, url: fallbackUrl, urlTemplate: template };
     } else {
       updated = { ...original, key: newKey, label: urlOrLabel.trim() || undefined };
@@ -328,8 +337,7 @@ export function buildShortcutRow(
   cancelBtn.className = 'btn-secondary btn-sm';
   cancelBtn.textContent = 'Cancel';
   cancelBtn.addEventListener('click', () => {
-    li.classList.remove('editing');
-    if (editingRow === li) editingRow = null;
+    cancelRowEdit();
   });
 
   if (onAlias && shortcut.type !== 'bundle') {
@@ -338,8 +346,7 @@ export function buildShortcutRow(
     editAliasBtn.className = 'btn-secondary btn-sm';
     editAliasBtn.textContent = 'Add alias';
     editAliasBtn.addEventListener('click', () => {
-      li.classList.remove('editing');
-      if (editingRow === li) editingRow = null;
+      cancelRowEdit();
       onAlias(shortcut);
     });
     editActions.append(saveBtn, cancelBtn, editAliasBtn);

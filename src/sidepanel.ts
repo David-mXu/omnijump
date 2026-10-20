@@ -3,7 +3,7 @@ import { icon } from './icons';
 import { IS_FIREFOX } from './platform';
 import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, clearAllStats, deleteShortcut, deleteShortcuts, getStore, normalizeKey, renameShortcut, restoreShortcuts, saveSettings, upsertShortcut } from './storage';
 import { buildShortcutRow, hoveredRow, normalizeUrl, openShortcut, renderOverwriteConfirm, savedStatusMessage, showUndoToast } from './ui';
-import { suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
+import { deriveSearchFallbackUrl, suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
 import { fuzzyFilter } from './fuzzy';
 import { Shortcut, Suggestion, UserSettings } from './types';
 
@@ -111,7 +111,7 @@ tabBundleBtn.addEventListener('click', () => showTab('bundle'));
 // refresh() reads storage and updates them; renderList() reads only the cache.
 // This means filter-input keystrokes never hit storage.
 let shortcutCache: Shortcut[] = [];
-let settingsCache: UserSettings = { maxShortcuts: 500, filterThreshold: 25, darkMode: false, staleAutoDelete: true, staleDays: 90, smartSuggestions: false };
+let settingsCache: UserSettings = { maxShortcuts: 500, filterThreshold: 10, darkMode: false, staleAutoDelete: true, staleDays: 90, smartSuggestions: false };
 
 function groupShortcuts(shortcuts: Shortcut[]): Array<{ shortcut: Shortcut; isAlias: boolean }> {
   const groupKey = (s: Shortcut) =>
@@ -291,7 +291,7 @@ async function persistRedirect(key: string): Promise<void> {
 
   if (isSearchType) {
     const urlTemplate = redirectUrlTemplateInput.value.trim();
-    const fallbackUrl = normalizeUrl(redirectUrlInput.value) || urlTemplate.replace('%s', '');
+    const fallbackUrl = deriveSearchFallbackUrl(urlTemplate, redirectUrlInput.value);
     try {
       await upsertShortcut({ key, url: fallbackUrl, urlTemplate, type: 'parameterized' });
       setRedirectStatus(savedStatusMessage(key, totalAfter), 'success');
@@ -902,6 +902,27 @@ importFile.addEventListener('change', async () => {
 
 // ── Keyboard navigation ───────────────────────────────────────────────────────
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    let handled = false;
+    if (!tabPickerEl.hidden) {
+      tabPickerEl.hidden = true;
+      handled = true;
+    }
+    if (!redirectTabPickerEl.hidden) {
+      redirectTabPickerEl.hidden = true;
+      handled = true;
+    }
+    if (!shortcutPickerEl.hidden) {
+      shortcutPickerEl.hidden = true;
+      handled = true;
+    }
+    if (!handled && !panelBundle.hidden && !cancelBundleEditBtn.hidden) {
+      cancelBundleEditBtn.click();
+      handled = true;
+    }
+    if (handled) return;
+  }
+
   const active = document.activeElement;
   const inInput = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
   if (inInput) return;

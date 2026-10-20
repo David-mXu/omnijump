@@ -417,7 +417,7 @@ chrome.omnibox.onInputChanged.addListener(async (text, suggest) => {
       );
 
   suggest(matches.slice(0, 8).map((s) => {
-    const target = s.type === 'parameterized' ? (s.urlTemplate ?? s.url) : (resolveTarget(s, '') ?? '');
+    const target = resolveTarget(s, args) ?? s.urlTemplate ?? s.url ?? '';
     // Firefox renders descriptions as plain text; the XML markup is Chrome-only.
     const description = IS_FIREFOX
       ? `${s.key} — ${target}`

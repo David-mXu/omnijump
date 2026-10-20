@@ -24,8 +24,10 @@ Type a keyword you've saved → hit Enter → you're there. That's it.
 |---|---|
 | **Redirect shortcuts** | Map any keyword to any URL. One keystroke, instant navigation. |
 | **Tab bundles** | Save a set of URLs under one keyword and open them all at once. |
-| **Search shortcuts** | Embed `{query}` in a URL template. Typing `yt dogs` searches YouTube for "dogs". |
-| **Smart tip** | Detects sites you repeatedly search and suggests saving them as shortcuts. |
+| **Search shortcuts** | Embed `%s` in a URL template. Typing `yt dogs` searches YouTube for "dogs". |
+| **Smart tip** | Detects sites you visit frequently and suggests saving them as shortcuts. |
+| **Omnibox search (`oj`)** | Type `oj <query>` in the address bar for fuzzy autocomplete with live resolved URL previews. |
+| **Delete undo** | Single-row and bulk deletes show an undo toast to restore shortcuts without data loss. |
 | **Side panel** | Full management panel — add, edit, delete, filter, and bulk-manage shortcuts. |
 | **Options page** | Full-page equivalent of the side panel, accessible from `chrome://extensions`. |
 | **Export / Import** | Back up and restore all shortcuts as JSON. |
