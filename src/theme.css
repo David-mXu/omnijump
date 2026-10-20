@@ -1,82 +1,81 @@
 /* ============================================================================
-   OmniJump — shadcn/ui Zinc theme. "Keyboard-native" identity.
-   Single source of truth for design tokens + shared components across popup,
-   sidepanel, and options. Built to match shadcn/ui's Zinc aesthetic.
+   OmniJump — Signature Cobalt Theme ("Keyboard-Native" Identity)
+   Single source of truth for design tokens & shared component styles across
+   popup, sidepanel, options, and onboarding.
    ============================================================================ */
 
 :root {
-  /* ── shadcn/ui Zinc Light Palette ────────────────────────────────────── */
+  /* ── OmniJump Cobalt Brand Identity ──────────────────────────────────── */
+  --accent: #1668C9;               /* Signature cobalt blue */
+  --accent-hover: #0e52a8;         /* Deep cobalt on hover */
+  --accent-active: #0a3d7a;
+  --accent-weak: #edf5ff;          /* Light cobalt wash for chips, suggestion banner, active rows */
+  --accent-border: #c4dfff;        /* Subtle border for cobalt-tinted components */
+  --on-accent: #ffffff;
+
+  /* Primary actions map directly to the signature cobalt */
+  --primary: var(--accent);
+  --primary-hover: var(--accent-hover);
+  --primary-foreground: var(--on-accent);
+
+  /* ── Surfaces & Text ─────────────────────────────────────────────────── */
   --background: #ffffff;
-  --foreground: #09090b;
+  --foreground: #0f172a;           /* slate-900 primary text */
 
   --card: #ffffff;
-  --card-foreground: #09090b;
+  --card-foreground: #0f172a;
 
   --popover: #ffffff;
-  --popover-foreground: #09090b;
+  --popover-foreground: #0f172a;
 
-  --primary: #18181b;          /* zinc-900 */
-  --primary-hover: #27272a;    /* zinc-800 */
-  --primary-foreground: #fafafa;
+  --secondary: #f8fafc;           /* slate-50 subtle fills */
+  --secondary-hover: #f1f5f9;     /* slate-100 */
+  --secondary-foreground: #1e293b;/* slate-800 */
 
-  --secondary: #f4f4f5;        /* zinc-100 */
-  --secondary-hover: #e4e4e7;  /* zinc-200 */
-  --secondary-foreground: #18181b;
+  --muted: #f8fafc;
+  --muted-foreground: #64748b;    /* slate-500 secondary text */
 
-  --muted: #f4f4f5;            /* zinc-100 */
-  --muted-foreground: #71717a; /* zinc-500 */
+  --destructive: #dc2626;         /* red-600 */
+  --destructive-hover: #b91c1c;   /* red-700 */
+  --destructive-weak: #fef2f2;    /* red-50 */
+  --destructive-foreground: #ffffff;
 
-  --accent-surface: #f4f4f5;   /* zinc-100 */
-  --accent-surface-foreground: #18181b;
+  --success: #16a34a;             /* emerald-600 */
+  --success-weak: #f0fdf4;        /* emerald-50 */
 
-  --destructive: #ef4444;      /* red-500 */
-  --destructive-hover: #dc2626;/* red-600 */
-  --destructive-weak: #fef2f2; /* red-50 */
-  --destructive-foreground: #fafafa;
+  --border: #e2e8f0;              /* slate-200 */
+  --border-strong: #cbd5e1;       /* slate-300 */
+  --input: #e2e8f0;
+  --ring: var(--accent);
 
-  --success: #10b981;          /* emerald-500 */
-  --success-weak: #ecfdf5;     /* emerald-50 */
-
-  --border: #e4e4e7;           /* zinc-200 */
-  --border-strong: #d4d4d8;    /* zinc-300 */
-  --input: #e4e4e7;            /* zinc-200 */
-  --ring: #18181b;             /* zinc-900 */
-
-  /* ── Brand accent (OmniJump cobalt) ─────────────────────────────────── */
-  --brand: #2563eb;            /* blue-600 */
-  --brand-hover: #1d4ed8;      /* blue-700 */
-  --brand-weak: #eff6ff;       /* blue-50 */
-
-  /* ── Legacy token mapping for backward compatibility ─────────────────── */
+  /* ── Backward-compatible Aliases ─────────────────────────────────────── */
   --bg: var(--background);
   --surface: var(--muted);
-  --surface-2: #eeeeF0;
+  --surface-2: var(--secondary-hover);
   --text: var(--foreground);
-  --text-2: #3f3f46;           /* zinc-700 */
+  --text-2: #334155;              /* slate-700 */
   --text-3: var(--muted-foreground);
-  --accent: var(--brand);
-  --accent-hover: var(--brand-hover);
-  --accent-weak: var(--brand-weak);
-  --on-accent: #ffffff;
   --danger: var(--destructive);
   --danger-weak: var(--destructive-weak);
 
-  /* ── Keycap (<kbd> shadcn component style) ──────────────────────────── */
-  --key-bg: #f4f4f5;
-  --key-border: #e4e4e7;
-  --key-text: #18181b;
+  /* ── Keycaps (Signature Physical Mechanical Look) ─────────────────────── */
+  --key-bg: #f8fafc;
+  --key-border: #cbd5e1;
+  --key-border-bottom: #94a3b8;
+  --key-text: #1e293b;
+  --key-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 
   /* ── Badges ──────────────────────────────────────────────────────────── */
-  --badge-bg: var(--secondary);
-  --badge-fg: var(--secondary-foreground);
-  --badge-border: var(--border);
-  --badge-search-bg: #f0fdf4;  /* emerald-50 */
-  --badge-search-fg: #15803d;  /* emerald-700 */
-  --badge-search-border: #bbf7d0;
+  --badge-bg: var(--accent-weak);
+  --badge-fg: var(--accent);
+  --badge-border: var(--accent-border);
+  --badge-search-bg: #ecfdf5;     /* emerald-50 */
+  --badge-search-fg: #059669;     /* emerald-600 */
+  --badge-search-border: #a7f3d0; /* emerald-200 */
 
-  /* ── Focus ring (shadcn ring-2 ring-ring ring-offset-2) ─────────────── */
-  --focus-ring: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
-  --ring-style: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+  /* ── Focus Ring ──────────────────────────────────────────────────────── */
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+  --ring-style: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
 
   /* ── Radius scale ────────────────────────────────────────────────────── */
   --r-sm: 4px;
@@ -84,7 +83,7 @@
   --r-lg: 8px;
   --r-xl: 12px;
 
-  /* ── Spacing scale ───────────────────────────────────────────────────── */
+  /* ── Spacing scale (4px rhythm) ──────────────────────────────────────── */
   --s1: 4px;
   --s2: 8px;
   --s3: 12px;
@@ -92,15 +91,15 @@
   --s5: 20px;
   --s6: 24px;
 
-  /* ── Typography (shadcn sans + mono) ─────────────────────────────────── */
+  /* ── Typography ──────────────────────────────────────────────────────── */
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
   /* ── Shadows ─────────────────────────────────────────────────────────── */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.07);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
-  --shadow-popover: 0 10px 38px -10px rgba(22, 23, 24, 0.35), 0 10px 20px -15px rgba(22, 23, 24, 0.2);
+  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+  --shadow-popover: 0 10px 38px -10px rgba(15, 23, 42, 0.25), 0 10px 20px -15px rgba(15, 23, 42, 0.15);
 
   /* ── Motion ──────────────────────────────────────────────────────────── */
   --t-fast: 120ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -108,71 +107,74 @@
 }
 
 body.dark {
-  /* ── shadcn/ui Zinc Dark Palette ─────────────────────────────────────── */
-  --background: #09090b;       /* zinc-950 */
-  --foreground: #fafafa;       /* zinc-50 */
+  /* ── OmniJump Cobalt Dark Identity ───────────────────────────────────── */
+  --accent: #4da3ff;               /* Electric cobalt sky */
+  --accent-hover: #6cb3ff;
+  --accent-active: #3391ff;
+  --accent-weak: rgba(77, 163, 255, 0.14);
+  --accent-border: rgba(77, 163, 255, 0.28);
+  --on-accent: #ffffff;
 
-  --card: #09090b;             /* zinc-950 */
-  --card-foreground: #fafafa;
+  --primary: var(--accent);
+  --primary-hover: var(--accent-hover);
+  --primary-foreground: #020c1b;
 
-  --popover: #09090b;          /* zinc-950 */
-  --popover-foreground: #fafafa;
+  --background: #0f1117;           /* Deep dark slate */
+  --foreground: #f8fafc;
 
-  --primary: #fafafa;          /* zinc-50 */
-  --primary-hover: #e4e4e7;    /* zinc-200 */
-  --primary-foreground: #18181b; /* zinc-900 */
+  --card: #141720;
+  --card-foreground: #f8fafc;
 
-  --secondary: #27272a;        /* zinc-800 */
-  --secondary-hover: #3f3f46;  /* zinc-700 */
-  --secondary-foreground: #fafafa;
+  --popover: #181b24;
+  --popover-foreground: #f8fafc;
 
-  --muted: #27272a;            /* zinc-800 */
-  --muted-foreground: #a1a1aa; /* zinc-400 */
+  --secondary: #1a1e29;
+  --secondary-hover: #242938;
+  --secondary-foreground: #f8fafc;
 
-  --accent-surface: #27272a;
-  --accent-surface-foreground: #fafafa;
+  --muted: #181b24;
+  --muted-foreground: #94a3b8;    /* slate-400 */
 
-  --destructive: #ef4444;      /* red-500 */
+  --destructive: #ef4444;         /* red-500 */
   --destructive-hover: #f87171;
-  --destructive-weak: #271010;
-  --destructive-foreground: #fafafa;
+  --destructive-weak: #291215;
+  --destructive-foreground: #ffffff;
 
-  --success: #34d399;          /* emerald-400 */
-  --success-weak: #062817;
+  --success: #34d399;             /* emerald-400 */
+  --success-weak: #062b1a;
 
-  --border: #27272a;           /* zinc-800 */
-  --border-strong: #3f3f46;    /* zinc-700 */
-  --input: #27272a;            /* zinc-800 */
-  --ring: #d4d4d8;             /* zinc-300 */
+  --border: #242938;              /* dark slate border */
+  --border-strong: #333a4f;
+  --input: #242938;
+  --ring: var(--accent);
 
-  --brand: #3b82f6;            /* blue-500 */
-  --brand-hover: #60a5fa;
-  --brand-weak: #172554;
-
-  /* ── Legacy token mapping ────────────────────────────────────────────── */
+  /* ── Backward-compatible Aliases ─────────────────────────────────────── */
   --bg: var(--background);
   --surface: var(--muted);
-  --surface-2: #1e1e22;
+  --surface-2: var(--secondary-hover);
   --text: var(--foreground);
-  --text-2: #d4d4d8;           /* zinc-300 */
+  --text-2: #cbd5e1;              /* slate-300 */
   --text-3: var(--muted-foreground);
-  --accent: var(--brand);
-  --accent-hover: var(--brand-hover);
-  --accent-weak: var(--brand-weak);
-  --on-accent: #051225;
   --danger: var(--destructive);
   --danger-weak: var(--destructive-weak);
 
-  --key-bg: #18181b;           /* zinc-900 */
-  --key-border: #27272a;       /* zinc-800 */
-  --key-text: #fafafa;
+  /* ── Dark Keycaps ────────────────────────────────────────────────────── */
+  --key-bg: #1c202d;
+  --key-border: #33394d;
+  --key-border-bottom: #474f6b;
+  --key-text: #e2e8f0;
+  --key-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 
-  --badge-bg: var(--secondary);
-  --badge-fg: var(--secondary-foreground);
-  --badge-border: var(--border);
-  --badge-search-bg: #052e16;  /* emerald-950 */
-  --badge-search-fg: #4ade80;  /* emerald-400 */
-  --badge-search-border: #14532d;
+  /* ── Dark Badges ─────────────────────────────────────────────────────── */
+  --badge-bg: rgba(77, 163, 255, 0.16);
+  --badge-fg: #6cb3ff;
+  --badge-border: rgba(77, 163, 255, 0.32);
+  --badge-search-bg: rgba(52, 211, 153, 0.14);
+  --badge-search-fg: #34d399;
+  --badge-search-border: rgba(52, 211, 153, 0.3);
+
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+  --ring-style: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 /* ── Reset & base ──────────────────────────────────────────────────────── */
@@ -181,6 +183,7 @@ body.dark {
 
 body {
   margin: 0;
+  padding: 0;
   font-family: var(--font-ui);
   font-size: 13px;
   line-height: 1.5;
@@ -194,7 +197,8 @@ body {
 input[type="text"],
 input[type="url"],
 input[type="number"],
-input[type="search"] {
+input[type="search"],
+select {
   width: 100%;
   height: 34px;
   padding: 0 10px;
@@ -211,8 +215,8 @@ input[type="search"] {
 input::placeholder { color: var(--muted-foreground); }
 input:focus-visible,
 input:focus {
-  border-color: var(--ring);
-  box-shadow: 0 0 0 1px var(--ring);
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
 }
 
 /* ── Buttons ───────────────────────────────────────────────────────────── */
@@ -234,23 +238,30 @@ button:focus-visible { outline: none; box-shadow: var(--ring-style); }
 button:disabled { opacity: 0.5; pointer-events: none; }
 
 .btn-primary {
-  background: var(--primary);
-  color: var(--primary-foreground);
+  background: var(--accent);
+  color: var(--on-accent);
   border: 1px solid transparent;
   padding: 8px 14px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 2px rgba(22, 104, 201, 0.25);
 }
-.btn-primary:hover { background: var(--primary-hover); }
-.btn-primary:active { transform: scale(0.98); }
+.btn-primary:hover {
+  background: var(--accent-hover);
+  box-shadow: 0 2px 5px rgba(22, 104, 201, 0.35);
+}
+.btn-primary:active { transform: scale(0.98); background: var(--accent-active); }
 
 .btn-secondary {
-  background: var(--secondary);
-  color: var(--secondary-foreground);
+  background: var(--background);
+  color: var(--text-2);
   border: 1px solid var(--border);
   padding: 8px 14px;
   box-shadow: var(--shadow-sm);
 }
-.btn-secondary:hover { background: var(--secondary-hover); }
+.btn-secondary:hover {
+  background: var(--secondary-hover);
+  color: var(--foreground);
+  border-color: var(--border-strong);
+}
 .btn-secondary:active { transform: scale(0.98); }
 
 .btn-sm { padding: 6px 10px; font-size: 12px; height: 28px; }
@@ -258,15 +269,16 @@ button:disabled { opacity: 0.5; pointer-events: none; }
 .btn-link {
   background: none;
   border: none;
-  color: var(--foreground);
+  color: var(--accent);
   font-size: 12px;
+  font-weight: 500;
   padding: 2px 4px;
   cursor: pointer;
   border-radius: var(--r-sm);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.btn-link:hover { color: var(--muted-foreground); }
+.btn-link:hover { color: var(--accent-hover); }
 
 /* ── Icon buttons (reveal on row hover/focus) ──────────────────────────── */
 .btn-icon {
@@ -287,27 +299,28 @@ li:hover .btn-icon,
 li:focus .btn-icon,
 li:focus-within .btn-icon { opacity: 1; }
 li.editing .btn-icon { opacity: 0 !important; }
-.btn-icon:hover { color: var(--foreground); background: var(--muted); }
+.btn-icon:hover { color: var(--accent); background: var(--accent-weak); }
 .btn-icon:focus-visible { opacity: 1; }
 .btn-icon.danger:hover { color: var(--destructive); background: var(--destructive-weak); }
 .btn-icon svg { width: 14px; height: 14px; }
 
-/* ── Keycap (<kbd> — shadcn style) ─────────────────────────────────────── */
+/* ── Keycap (<kbd> — Signature Keyboard Look) ──────────────────────────── */
 .key {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--key-text);
   background: var(--key-bg);
   border: 1px solid var(--key-border);
+  border-bottom: 2px solid var(--key-border-bottom);
   border-radius: var(--r-sm);
-  padding: 2px 6px;
-  line-height: 1.2;
-  box-shadow: var(--shadow-sm);
+  padding: 1px 6px;
+  line-height: 1.3;
+  box-shadow: var(--key-shadow);
   white-space: nowrap;
 }
 
@@ -316,8 +329,8 @@ li.editing .btn-icon { opacity: 0 !important; }
   display: inline-flex;
   align-items: center;
   font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   padding: 1px 7px;
   border-radius: 9999px;
   background: var(--badge-bg);
@@ -342,7 +355,7 @@ li {
   margin-bottom: 1px;
   transition: background var(--t);
 }
-li:hover { background: var(--muted); }
+li:hover { background: var(--secondary); }
 
 .display-row {
   display: flex;
@@ -359,11 +372,10 @@ li:hover { background: var(--muted); }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  letter-spacing: -0.01em;
 }
 .url {
-  color: var(--muted-foreground);
   font-size: 11px;
+  color: var(--muted-foreground);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -372,7 +384,8 @@ li:hover { background: var(--muted); }
 .stats {
   font-size: 10px;
   color: var(--muted-foreground);
-  margin-top: 2px;
+  flex-shrink: 0;
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
@@ -384,7 +397,7 @@ li.alias-row::before {
   left: 6px;
   top: 0;
   bottom: 0;
-  border-left: 2px solid var(--border-strong);
+  border-left: 2px solid var(--accent-border);
 }
 li.alias-row .display-row { padding-left: 18px; }
 li.alias-row .url { display: none; }
@@ -399,27 +412,24 @@ li.alias-row .url { display: none; }
 li.editing .display-row { display: none; }
 li.editing .edit-form { display: flex; }
 .edit-actions { display: flex; gap: var(--s2); }
-.edit-status { font-size: 11px; color: var(--destructive); min-height: 14px; }
 
-/* ── Multi-select ──────────────────────────────────────────────────────── */
-.select-cb {
+/* ── Multi-select bulk delete ──────────────────────────────────────────── */
+li .select-cb {
   display: none;
-  accent-color: var(--primary);
+  margin-right: var(--s1);
   flex-shrink: 0;
-  width: 14px;
-  height: 14px;
-  border-radius: var(--r-sm);
   cursor: pointer;
+  accent-color: var(--accent);
 }
 ul.selecting li { cursor: pointer; }
 ul.selecting li .select-cb { display: inline-block; }
 ul.selecting li .btn-icon { display: none !important; }
 ul.selecting li.editing .edit-form { display: none; }
 ul.selecting li.editing .display-row { display: flex; }
-ul.selecting li:has(.select-cb:checked) { background: var(--muted); }
+ul.selecting li:has(.select-cb:checked) { background: var(--accent-weak); }
 
 /* ── Keyboard focus on rows ────────────────────────────────────────────── */
-li:focus { outline: none; background: var(--muted); box-shadow: inset 2px 0 0 var(--foreground); }
+li:focus { outline: none; background: var(--secondary); box-shadow: inset 3px 0 0 var(--accent); }
 
 /* ── Empty state ───────────────────────────────────────────────────────── */
 .empty-state {
@@ -455,9 +465,9 @@ li:focus { outline: none; background: var(--muted); box-shadow: inset 2px 0 0 va
   transition: all var(--t);
 }
 .url-ancestor-btn:hover {
-  background: var(--foreground);
-  color: var(--background);
-  border-color: var(--foreground);
+  background: var(--accent-weak);
+  color: var(--accent);
+  border-color: var(--accent-border);
 }
 
 /* ── Status text (forms) ───────────────────────────────────────────────── */
@@ -465,7 +475,7 @@ li:focus { outline: none; background: var(--muted); box-shadow: inset 2px 0 0 va
 .error { color: var(--destructive); }
 .success { color: var(--success); }
 
-/* ── Undo toast (Sonner / shadcn toast style) ──────────────────────────── */
+/* ── Undo toast ────────────────────────────────────────────────────────── */
 .undo-toast {
   position: fixed;
   bottom: var(--s4);
@@ -487,17 +497,17 @@ li:focus { outline: none; background: var(--muted); box-shadow: inset 2px 0 0 va
 }
 .undo-toast span { overflow: hidden; text-overflow: ellipsis; }
 .undo-btn {
-  background: var(--secondary);
-  border: 1px solid var(--border);
-  padding: 4px 8px;
-  color: var(--secondary-foreground);
+  background: var(--accent-weak);
+  border: 1px solid var(--accent-border);
+  padding: 4px 9px;
+  color: var(--accent);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   border-radius: var(--r-sm);
   flex-shrink: 0;
-  transition: background var(--t);
+  transition: background var(--t), color var(--t);
 }
-.undo-btn:hover { background: var(--muted); text-decoration: none; }
+.undo-btn:hover { background: var(--accent); color: var(--on-accent); text-decoration: none; }
 
 /* ── Overwrite confirm (inline in form status) ─────────────────────────── */
 .confirm-overwrite { color: var(--destructive); }
@@ -513,19 +523,11 @@ li:focus { outline: none; background: var(--muted); box-shadow: inset 2px 0 0 va
   font-family: var(--font-mono);
   background: var(--key-bg);
   border: 1px solid var(--key-border);
+  border-bottom: 2px solid var(--key-border-bottom);
   border-radius: var(--r-sm);
   padding: 1px 5px;
   color: var(--key-text);
   font-size: 10px;
-}
-
-/* ── Reduced motion ────────────────────────────────────────────────────── */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-  }
 }
 
 /* ── Reduced motion ────────────────────────────────────────────────────── */
