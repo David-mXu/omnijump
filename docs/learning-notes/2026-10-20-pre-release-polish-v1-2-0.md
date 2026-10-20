@@ -48,3 +48,8 @@ Before deploying OmniJump v1.2.0 to the Chrome Web Store (following the v1.1.0 r
   - Ran `npx tsc --noEmit`: 0 TypeScript diagnostics.
 - **Extension Builds**:
   - Ran `npm run build:all`: both `dist/chrome` and `dist/firefox` compiled cleanly. Inspected `dist/chrome/manifest.json` and verified `"version": "1.2.0"`.
+- **Release Automation & OAuth Observation**:
+  - Pushed commit `5873c6f` and git tag `v1.2.0`.
+  - The `.github/workflows/release.yml` workflow ran automatically (run `39452904718`), passing all tests, typechecks, and package steps.
+  - The CWS API upload failed with `400: invalid_grant` because the stored Google OAuth `REFRESH_TOKEN` expired. In Google Cloud Console, OAuth consent screens in "Testing" status enforce a 7-day expiration policy on refresh tokens. Switching the Google Cloud OAuth Consent Screen status from "Testing" to "In production" ensures permanent tokens.
+  - Generated `dist/omnijump-chrome-v1.2.0.zip` (80 KB) and `dist/omnijump-firefox-v1.2.0.zip` (80 KB) ready for instant upload or manual CWS dashboard submission.
