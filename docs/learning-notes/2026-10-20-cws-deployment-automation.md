@@ -38,5 +38,7 @@ The goal was to streamline this into a single, automated workflow that supports 
   - `npm test` (vitest): 87 tests passed across all 4 test suites.
   - `npx tsc --noEmit`: 0 TypeScript diagnostics.
   - `npm run build:all`: cleanly generated both Chrome (`dist/chrome`) and Firefox (`dist/firefox`) bundles.
+- **CI & Lockfile Sync**:
+  - Locked `esbuild` dependency in `package.json` / `package-lock.json` and updated `.github/workflows/ci.yml` to Node 22, resolving npm dependency mismatches on Ubuntu runners. Verified passing status on GitHub Actions CI run `39450339401`.
 - **CLI Options Validation**:
   - Tested `npx chrome-webstore-upload-cli@latest --help` to verify arguments and environment variable expectations (`EXTENSION_ID`, `PUBLISHER_ID`, `CLIENT_ID`, `CLIENT_SECRET`, `REFRESH_TOKEN`).
