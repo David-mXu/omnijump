@@ -12,30 +12,32 @@
       .brand {
         display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s3);
       }
-      .brand-mark { color: var(--accent); display: flex; }
-      .brand-name { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; color: var(--text); }
-      .brand-name b { color: var(--accent); }
+      .brand-mark { color: var(--foreground); display: flex; }
+      .brand-name { font-size: 14px; font-weight: 600; letter-spacing: -0.02em; color: var(--foreground); }
+      .brand-name b { color: var(--foreground); font-weight: 700; }
 
-      label { display: block; font-size: 12px; margin-top: var(--s3); margin-bottom: var(--s1); color: var(--text-2); }
+      label { display: block; font-size: 12px; font-weight: 500; margin-top: var(--s3); margin-bottom: var(--s1); color: var(--foreground); }
       #shortcutKey { font-family: var(--font-mono); }
 
-      button[type="submit"] { margin-top: var(--s3); width: 100%; padding: 9px 10px; font-size: 13px; }
-      #status { margin-top: var(--s2); font-size: 12px; min-height: 14px; color: var(--text-2); }
+      button[type="submit"] { margin-top: var(--s3); width: 100%; padding: 8px 10px; font-size: 13px; }
+      #status { margin-top: var(--s2); font-size: 12px; min-height: 14px; color: var(--muted-foreground); }
 
       #openPanel {
         margin-top: var(--s2); width: 100%; display: inline-flex; align-items: center;
-        justify-content: center; gap: 6px; padding: 7px; font-size: 11px;
-        background: none; border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text-3);
+        justify-content: center; gap: 6px; padding: 7px; font-size: 12px; font-weight: 500;
+        background: var(--secondary); border: 1px solid var(--border); border-radius: var(--r-md); color: var(--secondary-foreground);
       }
       #openPanel svg { width: 13px; height: 13px; }
-      #openPanel:hover { background: var(--surface-2); color: var(--text); }
+      #openPanel:hover { background: var(--muted); }
 
       #suggestion {
-        background: var(--accent-weak); border-left: 3px solid var(--accent);
-        border-radius: var(--r-sm); padding: var(--s2) var(--s3);
+        background: var(--secondary); border: 1px solid var(--border);
+        border-left: 3px solid var(--primary);
+        border-radius: var(--r-md); padding: var(--s2) var(--s3);
         margin-bottom: var(--s3); font-size: 12px;
+        box-shadow: var(--shadow-sm);
       }
-      #suggestionText { color: var(--text); margin-bottom: var(--s2); line-height: 1.4; }
+      #suggestionText { color: var(--foreground); margin-bottom: var(--s2); line-height: 1.4; }
       #suggestionActions { display: flex; gap: var(--s2); }
       #saveSuggestion { flex: 1; }
     </style>

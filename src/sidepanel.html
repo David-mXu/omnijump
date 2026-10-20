@@ -15,37 +15,47 @@
         gap: var(--s2);
         padding: var(--s3) var(--s4) var(--s2);
       }
-      .brand-mark { color: var(--accent); display: flex; }
+      .brand-mark { color: var(--foreground); display: flex; }
       .brand-name {
         font-size: 14px;
-        font-weight: 700;
-        letter-spacing: -0.01em;
-        color: var(--text);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        color: var(--foreground);
       }
-      .brand-name b { color: var(--accent); font-weight: 700; }
+      .brand-name b { color: var(--foreground); font-weight: 700; }
 
-      /* ── Tabs ─────────────────────────────────────────────────────────────── */
+      /* ── Tabs (shadcn/ui TabsList & TabsTrigger) ────────────────────────── */
       nav {
         display: flex;
-        border-bottom: 1px solid var(--border);
-        background: var(--surface);
+        background: var(--muted);
+        padding: 3px;
+        margin: 0 var(--s4) var(--s2);
+        border-radius: var(--r-lg);
+        border: 1px solid var(--border);
+        gap: 2px;
       }
       .tab {
         flex: 1;
-        padding: 10px 6px;
+        padding: 6px 8px;
         border: none;
-        background: none;
+        background: transparent;
         cursor: pointer;
         font-size: 12px;
-        color: var(--text-2);
-        border-bottom: 2px solid transparent;
-        transition: color var(--t), background var(--t), border-color var(--t);
+        font-weight: 500;
+        color: var(--muted-foreground);
+        border-radius: calc(var(--r-lg) - 2px);
+        transition: color var(--t), background var(--t), box-shadow var(--t);
       }
-      .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
-      .tab:hover:not(.active) { color: var(--text); background: var(--surface-2); }
+      .tab.active {
+        color: var(--foreground);
+        background: var(--background);
+        box-shadow: var(--shadow-sm);
+        font-weight: 600;
+      }
+      .tab:hover:not(.active) { color: var(--foreground); }
 
       /* ── Layout ───────────────────────────────────────────────────────────── */
-      section { padding: var(--s3) var(--s4); }
+      section { padding: var(--s2) var(--s4) var(--s4); }
 
       /* ── Add redirect bar ─────────────────────────────────────────────────── */
       .add-redirect { display: flex; gap: var(--s2); margin-bottom: var(--s3); flex-wrap: wrap; }
@@ -59,12 +69,12 @@
         display: flex; align-items: center; justify-content: space-between;
         margin-bottom: var(--s2); gap: var(--s2);
       }
-      #count { font-size: 11px; color: var(--text-3); }
+      #count { font-size: 11px; color: var(--muted-foreground); font-weight: 500; }
       .list-actions { display: flex; gap: var(--s2); }
 
       /* ── Bundle form ──────────────────────────────────────────────────────── */
-      label { display: block; font-size: 12px; margin-top: var(--s3); margin-bottom: var(--s1); color: var(--text-2); }
-      .muted { color: var(--text-3); font-weight: 400; }
+      label { display: block; font-size: 12px; font-weight: 500; margin-top: var(--s3); margin-bottom: var(--s1); color: var(--foreground); }
+      .muted { color: var(--muted-foreground); font-weight: 400; }
       #urlList { margin-top: var(--s2); }
       .url-row { display: flex; gap: var(--s2); margin-bottom: var(--s2); align-items: center; }
       .url-row input { flex: 1; }
@@ -73,19 +83,20 @@
       .remove-url {
         flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
         padding: 6px; line-height: 0;
-        background: none; border: 1px solid var(--border-strong);
-        border-radius: var(--r-sm); color: var(--text-3);
+        background: none; border: 1px solid var(--border);
+        border-radius: var(--r-md); color: var(--muted-foreground);
       }
-      .remove-url svg { width: 15px; height: 15px; }
-      .remove-url:hover { color: var(--danger); background: var(--danger-weak); border-color: var(--danger); }
+      .remove-url svg { width: 14px; height: 14px; }
+      .remove-url:hover { color: var(--destructive); background: var(--destructive-weak); border-color: var(--destructive); }
       #addUrl {
         margin-top: var(--s1); width: 100%; display: inline-flex; align-items: center;
         justify-content: center; gap: 6px; padding: 7px; font-size: 12px;
-        background: none; border: 1px dashed var(--border-strong);
-        border-radius: var(--r-sm); color: var(--text-2);
+        background: var(--secondary); border: 1px dashed var(--border);
+        border-radius: var(--r-md); color: var(--secondary-foreground);
+        font-weight: 500;
       }
       #addUrl svg { width: 14px; height: 14px; }
-      #addUrl:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-weak); }
+      #addUrl:hover { border-color: var(--foreground); color: var(--foreground); background: var(--muted); }
       #saveBundle { margin-top: var(--s4); width: 100%; padding: 9px; font-size: 13px; }
       #cancelBundleEdit { margin-top: var(--s2); width: 100%; padding: 8px; font-size: 12px; }
       #bundleStatus { margin-top: var(--s2); }
@@ -94,14 +105,15 @@
 
       /* ── Pickers ──────────────────────────────────────────────────────────── */
       #tabPicker, #shortcutPicker, #redirectTabPicker {
-        border: 1px solid var(--border); border-radius: var(--r-sm);
-        margin-bottom: var(--s2); background: var(--surface);
+        border: 1px solid var(--border); border-radius: var(--r-lg);
+        margin-bottom: var(--s2); background: var(--popover);
+        box-shadow: var(--shadow-md);
       }
       #redirectTabPicker { width: 100%; }
       #tabPickList, #shortcutPickList, #redirectTabPickList { max-height: 180px; overflow-y: auto; padding: var(--s1) var(--s2); }
       .tab-pick-row {
         display: flex; align-items: center; gap: 7px; padding: 6px 0;
-        cursor: pointer; font-size: 11px; color: var(--text-2);
+        cursor: pointer; font-size: 11px; color: var(--foreground);
         border-bottom: 1px solid var(--border);
       }
       .tab-pick-row:last-child { border-bottom: none; }
@@ -109,34 +121,37 @@
       .tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .tab-pick-actions { display: flex; gap: var(--s2); padding: 6px var(--s2); border-top: 1px solid var(--border); }
       .shortcut-pick-item { flex: 1; min-width: 0; }
-      .shortcut-pick-key { font-family: var(--font-mono); font-weight: 600; font-size: 11px; color: var(--text); }
-      .shortcut-pick-url { font-size: 10px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .picker-empty { padding: 10px var(--s2); font-size: 11px; color: var(--text-3); text-align: center; }
+      .shortcut-pick-key { font-family: var(--font-mono); font-weight: 600; font-size: 11px; color: var(--foreground); }
+      .shortcut-pick-url { font-size: 10px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .picker-empty { padding: 10px var(--s2); font-size: 11px; color: var(--muted-foreground); text-align: center; }
 
       /* ── TIP suggestion banner ────────────────────────────────────────────── */
       #suggestion {
-        background: var(--accent-weak); border-left: 3px solid var(--accent);
-        border-radius: var(--r-sm); padding: var(--s2) var(--s3);
-        margin-bottom: var(--s3); font-size: 12px; color: var(--text);
+        background: var(--secondary); border: 1px solid var(--border);
+        border-left: 3px solid var(--primary);
+        border-radius: var(--r-md); padding: var(--s2) var(--s3);
+        margin-bottom: var(--s3); font-size: 12px; color: var(--foreground);
+        box-shadow: var(--shadow-sm);
       }
       #suggestionActions { display: flex; gap: var(--s2); margin-top: var(--s2); }
 
       /* ── Search shortcut toggle ───────────────────────────────────────────── */
       #searchFields { margin-top: var(--s2); display: flex; flex-direction: column; gap: var(--s2); }
-      #searchFields small { font-size: 10px; color: var(--text-3); }
+      #searchFields small { font-size: 10px; color: var(--muted-foreground); }
 
       /* ── Settings — grouped cards ─────────────────────────────────────────── */
       .card {
-        border: 1px solid var(--border); border-radius: var(--r-md);
-        padding: var(--s3) var(--s4); margin-bottom: var(--s3); background: var(--bg);
+        border: 1px solid var(--border); border-radius: var(--r-lg);
+        padding: var(--s3) var(--s4); margin-bottom: var(--s3); background: var(--card);
+        box-shadow: var(--shadow-sm);
       }
-      h2 { font-size: 12px; font-weight: 600; margin: 0 0 var(--s2); color: var(--text); text-transform: uppercase; letter-spacing: 0.04em; }
+      h2 { font-size: 11px; font-weight: 600; margin: 0 0 var(--s2); color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.05em; }
       .shortcut-row {
         display: flex; justify-content: space-between; align-items: center;
-        padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px;
+        padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12px;
       }
       .shortcut-row:last-of-type { border-bottom: none; }
-      .shortcut-label { color: var(--text-2); }
+      .shortcut-label { color: var(--foreground); }
       .shortcut-key {
         font-family: var(--font-mono); background: var(--key-bg);
         border: 1px solid var(--key-border); padding: 2px 7px;
