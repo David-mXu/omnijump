@@ -11,7 +11,7 @@
     <style>
       /* Shared tokens & components live in theme.css (imported via popup.ts).
          Only popup-specific layout lives here. */
-      body { min-width: 300px; padding: var(--s4); }
+      body, body.popup { min-width: 320px; padding: var(--s4); }
 
       .brand {
         display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s3);
@@ -46,7 +46,7 @@
       #saveSuggestion { flex: 1; }
     </style>
   </head>
-  <body>
+  <body class="popup">
     <header class="brand">
       <img src="../images/icon32.png" width="20" height="20" alt="OmniJump" class="brand-mark" />
       <span class="brand-name">Omni<b>Jump</b></span>

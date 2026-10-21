@@ -184,7 +184,6 @@ body.dark {
 
 body {
   margin: 0;
-  padding: 0;
   color-scheme: light;
   font-family: var(--font-ui);
   font-size: 13px;
@@ -193,6 +192,12 @@ body {
   background: var(--background);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Popup page layout ─────────────────────────────────────────────────── */
+body.popup {
+  min-width: 320px;
+  padding: var(--s4);
 }
 
 /* ── Inputs ────────────────────────────────────────────────────────────── */
