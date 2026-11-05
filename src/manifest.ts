@@ -107,6 +107,9 @@ export default function createManifest(target: BrowserTarget): Manifest {
       sidebar_action?: { default_panel: string; default_title: string };
     }).browser_specific_settings = {
       gecko: {
+        // Locked by the existing AMO listing (first submitted 2026-06-02):
+        // AMO rejects packages whose gecko.id differs from the listing's
+        // original ID, so this value must never change.
         id: 'omnijump@example.com',
         strict_min_version: '140.0',
         data_collection_permissions: {

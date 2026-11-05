@@ -99,7 +99,7 @@ Severity ladder: **Critical** (remote code exec / store takeover with no user ac
 
 ## Open questions needing live-browser verification
 
-1. Chrome's `$` semantics in `regexSubstitution` (Info above) — probe on Chrome 141+.
+1. ~~Chrome's `$` semantics in `regexSubstitution`~~ — **Verified live 2026-11-05** (Chromium 1248 via Playwright, `--load-extension=dist/chrome`): parameterized shortcut `dollarprobe` with query `a$b` redirected to `https://www.youtube.com/results?search_query=a%24b` — `$` is treated literally, encoding intact. The same run confirmed end-to-end: import collision confirm (rendering + all three choices), settings-toggle immunity (M2), timestamp clamping (M3), live key-length rejection (L2), and a real `google.com/search?q=key` → target DNR redirect. Script: `/tmp/opencode/oj-e2e/smoke.mjs` (18/18 checks passed).
 2. RE2 program-size cliff vs. the 160-char heuristic — fuzz keyword lengths on real Chrome.
 3. DNR substitution outputting an invalid URL (template placing `\1` in host position) — confirm silent failure, no error-page loop.
 4. Firefox DNR parity for the lazy-capture param regex — tests compile patterns as JS RegExp only.

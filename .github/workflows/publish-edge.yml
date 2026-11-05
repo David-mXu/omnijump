@@ -1,0 +1,118 @@
+name: Publish to Edge Add-ons
+
+on:
+  push:
+    tags:
+      - 'edge/v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-edge
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+
+  publish-edge:
+    needs: test
+    runs-on: ubuntu-latest
+    # Configure Required reviewers on this environment (Settings →
+    # Environments → edge-addons) so store submissions need human approval.
+    environment: edge-addons
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build:chrome
+
+      - name: Resolve and verify version
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          TAG="${GITHUB_REF_NAME#edge/}"   # strip the edge/ prefix
+          if [ "v${PKG}" != "${TAG}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package.json v${PKG}"; exit 1
+          fi
+          echo "VERSION=${PKG}" >> "$GITHUB_ENV"
+
+      - name: Package zip
+        run: (cd dist/chrome && zip -qr "../../omnijump-edge-${VERSION}.zip" .)
+
+      - name: Upload package to Edge Add-ons
+        # Secrets via env (never echoed); the API is the official Edge Add-ons
+        # Update REST API v1.1 (ApiKey + X-ClientID headers).
+        env:
+          EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
+          EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+          EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+        run: |
+          API="https://api.addons.microsoftedge.microsoft.com/v1/products/${EDGE_PRODUCT_ID}"
+          AUTH=(-H "Authorization: ApiKey ${EDGE_API_KEY}" -H "X-ClientID: ${EDGE_CLIENT_ID}")
+
+          echo "Uploading package..."
+          UPLOAD_HEADERS=$(mktemp)
+          UPLOAD_CODE=$(curl -sS -o /dev/null -w '%{http_code}' -D "${UPLOAD_HEADERS}" \
+            "${AUTH[@]}" -H "Content-Type: application/zip" \
+            -X POST -T "omnijump-edge-${VERSION}.zip" \
+            "${API}/submissions/draft/package")
+          if [ "${UPLOAD_CODE}" != "202" ]; then
+            echo "Upload failed with HTTP ${UPLOAD_CODE}"; exit 1
+          fi
+          # The Location header carries the operation URL; the last segment is the operation ID.
+          OP_URL=$(grep -i '^location:' "${UPLOAD_HEADERS}" | tr -d '\r' | awk '{print $2}')
+          OP_ID="${OP_URL##*/}"
+          echo "Upload operation: ${OP_ID}"
+
+          STATUS="InProgress"
+          for i in $(seq 1 30); do
+            sleep 10
+            STATUS=$(curl -sS "${AUTH[@]}" "${API}/submissions/draft/package/operations/${OP_ID}" \
+              | sed -n 's/.*"status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+            echo "Upload status (${i}): ${STATUS}"
+            [ "${STATUS}" != "InProgress" ] && break
+          done
+          if [ "${STATUS}" != "Succeeded" ]; then
+            echo "Package upload did not succeed (status: ${STATUS})"; exit 1
+          fi
+
+          echo "Publishing submission..."
+          PUB_HEADERS=$(mktemp)
+          PUB_CODE=$(curl -sS -o /dev/null -w '%{http_code}' -D "${PUB_HEADERS}" \
+            "${AUTH[@]}" -H "Content-Type: application/json" \
+            -X POST -d "{\"notes\": \"Automated release ${VERSION} via GitHub Actions\"}" \
+            "${API}/submissions")
+          if [ "${PUB_CODE}" != "202" ]; then
+            echo "Publish request failed with HTTP ${PUB_CODE}"; exit 1
+          fi
+          PUB_OP_URL=$(grep -i '^location:' "${PUB_HEADERS}" | tr -d '\r' | awk '{print $2}')
+          PUB_OP_ID="${PUB_OP_URL##*/}"
+          echo "Publish operation: ${PUB_OP_ID}"
+
+          STATUS="InProgress"
+          for i in $(seq 1 60); do
+            sleep 10
+            STATUS=$(curl -sS "${AUTH[@]}" "${API}/submissions/operations/${PUB_OP_ID}" \
+              | sed -n 's/.*"status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+            echo "Publish status (${i}): ${STATUS}"
+            [ "${STATUS}" != "InProgress" ] && break
+          done
+          if [ "${STATUS}" != "Succeeded" ]; then
+            echo "Publish did not succeed (status: ${STATUS})"; exit 1
+          fi
+          echo "Edge Add-ons submission ${VERSION} published (pending Microsoft review)."

@@ -65,9 +65,9 @@ next to store credentials. Keep them upgraded deliberately via
 `npm install -D chrome-webstore-upload-cli@X web-ext@Y`.
 
 The publish jobs run in GitHub environments (`chrome-store`,
-`firefox-addons`). Configure **Required reviewers** on those environments
-(Settings → Environments) so store submissions need a human approval before
-credentials are exposed to the job.
+`firefox-addons`, `edge-addons`). Configure **Required reviewers** on those
+environments (Settings → Environments) so store submissions need a human
+approval before credentials are exposed to the job.
 
 ## Local dry run
 
@@ -85,3 +85,50 @@ test → build → `web-ext sign --channel listed`, using
 https://addons.mozilla.org/developers/addon/api/key/) stored as the
 `FIREFOX_API_KEY` / `FIREFOX_API_SECRET` repository secrets and passed via
 environment variables (never on the command line).
+
+The AMO listing already exists (`omnijump`, first submitted 2026-06-02 with
+version 1.1.0), which locks the Gecko ID to `omnijump@example.com` — that
+value in `src/manifest.ts` must never change, because AMO rejects packages
+whose `browser_specific_settings.gecko.id` differs from the listing's
+original ID. Changing it would require deleting the listing and re-submitting
+from zero.
+
+Setup status (2026-11-05): **complete.** The listing's owner account is
+davidmingxu@gmail.com; `FIREFOX_API_KEY` (JWT issuer `user:19957299`) and
+`FIREFOX_API_SECRET` are set as repository secrets, and version 1.2.4 was
+submitted manually through the Dev Hub (with source archive — reviewers
+require it for minified builds). From then on, `git tag firefox/vX.Y.Z && git push --tags` publishes.
+
+## Edge Add-ons (automated via `publish-edge.yml`)
+
+Pushing an `edge/v*` tag runs `.github/workflows/publish-edge.yml`: test →
+build → zip → the official Edge Add-ons Update REST API v1.1 (upload package,
+poll, publish; curl only — no npm tooling involved).
+
+Setup status (2026-11-05): **complete.** The listing already existed
+(submitted 2026-06-08, store ID `0RDCKCMDTCHW`, CRX
+`kifdlencphamnhjblkcflkhfgkbhecgc`) under the Microsoft account
+davidmingxu@gmail.com. `EDGE_PRODUCT_ID` (`4fe1a1eb-…-bab754`),
+`EDGE_CLIENT_ID`, and `EDGE_API_KEY` are set as repository secrets, and
+version 1.2.4 was published through the same API flow the workflow uses.
+From then on, `git tag edge/vX.Y.Z && git push --tags` publishes (tag must
+match `package.json`'s version).
+
+**Key rotation (important):** Edge API keys expire — the current
+`EDGE_API_KEY` expires **2027-01-16**. Before then: Partner Center →
+Microsoft Edge → Publish API → **New API key**, copy it immediately (the
+full value is only shown in the creating session), and update the
+`EDGE_API_KEY` repository secret. AMO and Chrome credentials do not expire.
+
+If ever starting a store listing from zero elsewhere, one-time steps were:
+register the developer account, create the listing manually (the API can
+only **update** an existing product), copy the Product ID, enable the
+Publish API (v1.1) and create credentials, then add the three secrets.
+
+## Store/tag matrix
+
+| Tag push | Workflow | Store |
+|---|---|---|
+| `vX.Y.Z` | `release.yml` | Chrome Web Store (+ GitHub release zips) |
+| `firefox/vX.Y.Z` | `publish-firefox.yml` | Mozilla Add-ons (AMO) |
+| `edge/vX.Y.Z` | `publish-edge.yml` | Microsoft Edge Add-ons |
