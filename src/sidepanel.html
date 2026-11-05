@@ -62,10 +62,10 @@
       section { padding: var(--s2) var(--s4) var(--s4); }
 
       /* ── Add redirect bar ─────────────────────────────────────────────────── */
-      .add-redirect { display: flex; gap: var(--s2); margin-bottom: var(--s3); flex-wrap: wrap; }
-      .add-redirect input { flex: 1; min-width: 80px; }
+      .add-redirect { display: flex; gap: var(--s2); margin-bottom: var(--s3); flex-wrap: wrap; align-items: center; }
+      .add-redirect > input { flex: 1; min-width: 80px; }
       #redirectKey { font-family: var(--font-mono); }
-      .add-redirect .form-status { width: 100%; }
+      .add-redirect .form-status { width: 100%; flex-basis: 100%; }
 
       /* ── Filter + list header ─────────────────────────────────────────────── */
       #filterInput { margin-bottom: var(--s2); }
@@ -140,8 +140,9 @@
       #suggestionActions { display: flex; gap: var(--s2); margin-top: var(--s2); }
 
       /* ── Search shortcut toggle ───────────────────────────────────────────── */
-      #searchFields { margin-top: var(--s2); display: flex; flex-direction: column; gap: var(--s2); }
+      #searchFields { margin-top: var(--s1); display: flex; flex-direction: column; gap: var(--s2); width: 100%; flex-basis: 100%; }
       #searchFields small { font-size: 10px; color: var(--muted-foreground); }
+      #redirectUrlAncestors, #redirectTabPicker { width: 100%; flex-basis: 100%; }
 
       /* ── Settings — grouped cards ─────────────────────────────────────────── */
       .card {
@@ -171,12 +172,14 @@
       #customizeShortcut:hover { background: var(--accent-weak); border-color: var(--accent-border); }
       #firefoxShortcutHint { font-size: 11px; color: var(--text-3); line-height: 1.5; }
       .settings-row { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s2); }
-      #maxShortcutsInput { width: 80px; }
+      #maxShortcutsInput, #filterThresholdInput { width: 80px; }
       .form-status { margin-top: var(--s2); }
 
       /* ── Weekly usage chart ───────────────────────────────────────────────── */
-      #weeklyChart { display: flex; align-items: flex-end; gap: var(--s1); height: 44px; margin-top: var(--s2); }
-      .week-bar { flex: 1; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 2px; }
+      #weeklyChart { display: flex; align-items: flex-end; gap: var(--s1); height: 56px; margin-top: var(--s2); }
+      .week-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 3px; }
+      .week-bar { width: 100%; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 2px; }
+      .week-day { font-size: 9px; color: var(--muted-foreground); line-height: 1; }
       #weekTotal { font-size: 11px; color: var(--text-3); margin-top: var(--s1); font-variant-numeric: tabular-nums; }
     </style>
   </head>
@@ -185,14 +188,14 @@
       <img src="../images/icon32.png" width="20" height="20" alt="OmniJump" class="brand-mark" />
       <span class="brand-name">Omni<b>Jump</b></span>
     </header>
-    <nav>
-      <button id="tabShortcuts" class="tab active">Shortcuts</button>
-      <button id="tabBundle" class="tab">New bundle</button>
-      <button id="tabSettings" class="tab">Settings</button>
+    <nav class="tabs" role="tablist" aria-label="OmniJump sections">
+      <button id="tabShortcuts" class="tab active" role="tab" aria-selected="true" aria-controls="panelShortcuts">Shortcuts</button>
+      <button id="tabBundle" class="tab" role="tab" aria-selected="false" aria-controls="panelBundle">New bundle</button>
+      <button id="tabSettings" class="tab" role="tab" aria-selected="false" aria-controls="panelSettings">Settings</button>
     </nav>
 
     <!-- Shortcuts panel -->
-    <section id="panelShortcuts">
+    <section id="panelShortcuts" role="tabpanel" aria-labelledby="tabShortcuts">
       <div id="suggestion" hidden>
         <div id="suggestionText"></div>
         <div id="suggestionActions">
@@ -201,25 +204,25 @@
         </div>
       </div>
       <div class="add-redirect">
-        <input id="redirectKey" type="text" autocomplete="off" placeholder="keyword" />
-        <input id="redirectUrl" type="text" placeholder="google.com or https://..." />
-        <div id="redirectUrlAncestors" class="url-ancestors"></div>
+        <input id="redirectKey" type="text" autocomplete="off" placeholder="keyword" aria-label="Shortcut keyword" />
+        <input id="redirectUrl" type="text" placeholder="google.com or https://..." aria-label="Target URL" />
+        <button type="button" id="saveRedirect" class="btn-primary">Add</button>
+        <div id="redirectUrlAncestors" class="url-ancestors" hidden></div>
         <button type="button" id="pickRedirectTab" class="btn-link">Pick an open tab…</button>
+        <button type="button" id="searchToggle" class="btn-link" aria-pressed="false">Make search shortcut</button>
         <div id="redirectTabPicker" hidden>
           <div id="redirectTabPickList"></div>
           <div class="tab-pick-actions">
             <button type="button" id="cancelRedirectPicker" class="btn-secondary btn-sm">Cancel</button>
           </div>
         </div>
-        <button type="button" id="saveRedirect" class="btn-primary">Add</button>
-        <div id="addRedirectStatus" class="form-status"></div>
-        <button type="button" id="searchToggle" class="btn-link">Make search shortcut</button>
         <div id="searchFields" hidden>
-          <input id="redirectUrlTemplate" type="text" placeholder="https://site.com/search?q=%s" />
+          <input id="redirectUrlTemplate" type="text" placeholder="https://site.com/search?q=%s" aria-label="Search URL template" />
           <small>Use %s where the query goes. The URL above is the fallback when no query is typed.</small>
         </div>
+        <div id="addRedirectStatus" class="form-status" role="status"></div>
       </div>
-      <input id="filterInput" type="search" placeholder="Filter shortcuts…" hidden>
+      <input id="filterInput" type="search" placeholder="Filter shortcuts…" aria-label="Filter shortcuts" hidden>
       <div class="list-header">
         <div id="count"></div>
         <div class="list-actions">
@@ -245,7 +248,7 @@
     </section>
 
     <!-- Bundle creation panel -->
-    <section id="panelBundle" hidden>
+    <section id="panelBundle" role="tabpanel" aria-labelledby="tabBundle" hidden>
       <form id="bundleForm">
         <label for="bundleKey">Keyword</label>
         <input id="bundleKey" type="text" autocomplete="off" placeholder="e.g. work" />
@@ -287,7 +290,7 @@
     </section>
 
     <!-- Settings panel -->
-    <section id="panelSettings" hidden>
+    <section id="panelSettings" role="tabpanel" aria-labelledby="tabSettings" hidden>
       <div class="card">
         <h2>Appearance</h2>
         <div class="settings-row">
@@ -345,7 +348,7 @@
         <div id="weeklyChart"></div>
         <div id="weekTotal"></div>
         <button type="button" id="clearStatsBtn" class="btn-secondary btn-sm" style="margin-top:8px">Clear stats</button>
-        <div id="clearStatsStatus" class="form-status"></div>
+        <div id="clearStatsStatus" class="form-status" role="status"></div>
       </div>
 
       <div class="card">
@@ -356,7 +359,7 @@
           <button type="button" id="loadStarterSettingsBtn" class="btn-secondary btn-sm">Load starter shortcuts</button>
           <input type="file" id="importFile" accept=".json" hidden>
         </div>
-        <div id="dataStatus" class="form-status"></div>
+        <div id="dataStatus" class="form-status" role="status"></div>
       </div>
 
       <div class="card">
@@ -364,7 +367,7 @@
         <div class="settings-row" style="flex-wrap:wrap;gap:6px">
           <label style="display:flex;align-items:center;gap:6px;flex:1 1 100%">
             <input type="checkbox" id="staleToggle"> Delete shortcuts unused for
-            <input id="staleDaysInput" type="number" min="7" max="365" step="1" style="width:60px">
+            <input id="staleDaysInput" type="number" min="7" max="365" step="1" style="width:60px" aria-label="Days before deleting stale shortcuts">
             days
           </label>
         </div>

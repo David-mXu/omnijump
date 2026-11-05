@@ -114,7 +114,7 @@ body.dark {
   --accent-active: #3391ff;
   --accent-weak: rgba(77, 163, 255, 0.14);
   --accent-border: rgba(77, 163, 255, 0.28);
-  --on-accent: #ffffff;
+  --on-accent: #020c1b;
 
   --primary: var(--accent);
   --primary-hover: var(--accent-hover);
@@ -470,9 +470,35 @@ li:focus { outline: none; background: var(--secondary); box-shadow: inset 3px 0 
   font-weight: 600;
 }
 
-/* ── URL ancestor chips ────────────────────────────────────────────────── */
-.url-ancestors { display: flex; flex-wrap: wrap; gap: var(--s1); margin-top: var(--s1); }
+/* ── URL ancestor chips & search fields ────────────────────────────────── */
+.url-ancestors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1);
+  margin-top: var(--s1);
+  width: 100%;
+  flex-basis: 100%;
+}
 .url-ancestors:empty { display: none; }
+#searchFields {
+  width: 100%;
+  flex-basis: 100%;
+}
+.drag-handle {
+  cursor: grab;
+  color: var(--muted-foreground);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 2px;
+  flex-shrink: 0;
+  user-select: none;
+}
+.drag-handle:hover {
+  color: var(--foreground);
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
 .url-ancestor-btn {
   font-size: 11px;
   padding: 2px 8px;
@@ -566,6 +592,22 @@ li:focus { outline: none; background: var(--secondary); box-shadow: inset 3px 0 
   color: var(--destructive);
   font-weight: 700;
   font-size: 11px;
+}
+.confirm-delete-btn {
+  background: var(--destructive);
+  color: var(--destructive-foreground);
+  border: 1px solid transparent;
+  padding: 3px 8px;
+  height: auto;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background var(--t), color var(--t);
+}
+.confirm-delete-btn:hover {
+  background: var(--destructive-hover);
 }
 .confirm-cancel-btn {
   background: var(--secondary);

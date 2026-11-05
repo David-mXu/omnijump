@@ -12,7 +12,11 @@ const MAX_DYNAMIC_RULES = 5000;
 // Measured on Chromium 141 with the patterns below: ~94-152 char patterns
 // compile fine, a 187 char (3-engine) pattern is rejected. Treat lengths above
 // this as risky and warn, since long user keywords also inflate the pattern.
-const MAX_SAFE_REGEX_LENGTH = 160;
+// Raised to 200 after the Google-host hardening above: per-engine patterns are
+// alternation-free, so even ~200 chars compile to a RE2 program far under the
+// 2 KB limit (keywords are capped at 64 chars on all write surfaces, which
+// keeps every pattern under ~210 chars).
+const MAX_SAFE_REGEX_LENGTH = 200;
 
 interface SearchEngine {
   name: string;
@@ -24,8 +28,14 @@ interface SearchEngine {
 // are scoped to these hosts and search paths so unrelated services (e.g.
 // docs.google.com, drive.google.com) with `?q=key` are never intercepted.
 const SEARCH_ENGINES: SearchEngine[] = [
-  { name: 'google', pattern: '(?:www\\.)?google\\.[a-z]+(?:\\.[a-z]+)?/(?:search|webhp)?' },
-  { name: 'bing', pattern: '(?:www\\.|cn\\.)?bing\\.com/search' },
+  // Google ran on google.<com|cat|eus|any ccTLD> optionally followed by a
+  // second 2-letter level (co.uk, com.au...). The open `[a-z]+` form also
+  // matched attacker-registerable hosts like google.evil.com — a page there
+  // could observe which keywords a visitor owns — so TLDs are restricted to
+  // the shapes Google actually uses. The mandatory `/` after the TLD stops
+  // deeper suffixes (google.co.uk.evil.com still fails).
+  { name: 'google', pattern: '(?:www\\.)?google\\.(?:com|cat|eus|[a-z]{2})(?:\\.[a-z]{2})?/(?:search|webhp)?' },
+  { name: 'bing', pattern: '(?:(?:www|cn|www2|www4)\\.)?bing\\.com/search/?' },
   { name: 'duckduckgo', pattern: '(?:(?:www|html|lite)\\.)?duckduckgo\\.com/(?:html/|lite/)?' },
   { name: 'brave', pattern: 'search\\.brave\\.com/(?:search)?' },
   { name: 'kagi', pattern: '(?:www\\.)?kagi\\.com/(?:search)?' },
@@ -48,13 +58,13 @@ function escapeRegex(value: string): string {
 
 // `?q=key`, `&q=key` ... and rejects a partial word match (`q=ghub`).
 function buildQueryRegex(engine: SearchEngine, key: string): string {
-  return `^https?://${engine.pattern}(?:\\?[^#]*&|\\?)q=${escapeRegex(key)}(?:[&#]|$)`;
+  return `^https?://${engine.pattern}(?:\\?[^#]*&|\\?)q=${escapeRegex(key)}(?:\\+|%20)*(?:[&#]|$)`;
 }
 
 // Same, but captures everything after `key ` so it can be substituted into the
 // shortcut's URL template.
 function buildParamQueryRegex(engine: SearchEngine, key: string): string {
-  return `^https?://${engine.pattern}(?:\\?[^#]*&|\\?)q=${escapeRegex(key)}(?:\\+|%20)(.+?)(?:[&#].*)?$`;
+  return `^https?://${engine.pattern}(?:\\?[^#]*&|\\?)q=${escapeRegex(key)}(?:\\+|%20)+([^&#]+?)(?:[&#].*)?$`;
 }
 
 function resolveShortcutUrl(shortcut: Shortcut): string | null {
@@ -64,10 +74,20 @@ function resolveShortcutUrl(shortcut: Shortcut): string | null {
   return shortcut.url;
 }
 
-function isSafeRedirectUrl(url: string | undefined | null): boolean {
+function isSafeRedirectUrl(url: string | undefined | null, allowPlaceholder = false): boolean {
   if (!url) return false;
   const lower = url.toLowerCase();
-  return lower.startsWith('http:') || lower.startsWith('https:');
+  if (!lower.startsWith('http:') && !lower.startsWith('https:')) return false;
+  try {
+    const parsed = new URL(allowPlaceholder ? url.replace(/%s/g, 'param') : url);
+    return (
+      (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+      parsed.hostname.length > 0 &&
+      !/\s/.test(parsed.hostname)
+    );
+  } catch {
+    return false;
+  }
 }
 
 interface BuiltRules {
@@ -96,7 +116,7 @@ function buildRules(shortcuts: Shortcut[]): BuiltRules {
       continue;
     }
 
-    const parameterized = shortcut.type === 'parameterized' && isSafeRedirectUrl(shortcut.urlTemplate);
+    const parameterized = shortcut.type === 'parameterized' && isSafeRedirectUrl(shortcut.urlTemplate, true);
     const rulesPerShortcut = SEARCH_ENGINES.length * (parameterized ? 2 : 1);
 
     if (rules.length + rulesPerShortcut > MAX_DYNAMIC_RULES) {
@@ -105,7 +125,13 @@ function buildRules(shortcuts: Shortcut[]): BuiltRules {
     }
 
     const exactRegexes = SEARCH_ENGINES.map((engine) => buildQueryRegex(engine, shortcut.key));
-    if (exactRegexes.some((regex) => regex.length > MAX_SAFE_REGEX_LENGTH)) {
+    const paramRegexes = parameterized
+      ? SEARCH_ENGINES.map((engine) => buildParamQueryRegex(engine, shortcut.key))
+      : [];
+    if (
+      exactRegexes.some((regex) => regex.length > MAX_SAFE_REGEX_LENGTH) ||
+      paramRegexes.some((regex) => regex.length > MAX_SAFE_REGEX_LENGTH)
+    ) {
       console.warn(
         `OmniJump: shortcut "${shortcut.key}" has a very long keyword; Chrome may reject its redirect rule.`,
       );
@@ -123,8 +149,8 @@ function buildRules(shortcuts: Shortcut[]): BuiltRules {
 
     // Capture-group rules for parameterized shortcuts (keyword + argument)
     if (parameterized && shortcut.urlTemplate) {
-      const substitution = shortcut.urlTemplate.replace('%s', '\\1');
-      for (const engine of SEARCH_ENGINES) {
+      const substitution = shortcut.urlTemplate.replace(/\\/g, '\\\\').replace(/%s/g, '\\1');
+      SEARCH_ENGINES.forEach((_engine, index) => {
         rules.push({
           id: id++,
           priority: 2,
@@ -133,12 +159,12 @@ function buildRules(shortcuts: Shortcut[]): BuiltRules {
             redirect: { regexSubstitution: substitution },
           },
           condition: {
-            regexFilter: buildParamQueryRegex(engine, shortcut.key),
+            regexFilter: paramRegexes[index],
             isUrlFilterCaseSensitive: false,
             resourceTypes,
           },
         });
-      }
+      });
     }
   }
 
@@ -174,7 +200,7 @@ async function applyRules(removeRuleIds: number[], rules: chrome.declarativeNetR
   }
 }
 
-export async function rebuildDynamicRules(): Promise<void> {
+async function runRebuildDynamicRules(): Promise<void> {
   const store = await getStore();
   const shortcuts = Object.values(store.shortcuts);
 
@@ -189,4 +215,23 @@ export async function rebuildDynamicRules(): Promise<void> {
   const removeRuleIds = existing.map((rule) => rule.id);
 
   await applyRules(removeRuleIds, rules);
+}
+
+let activeRebuild: Promise<void> | null = null;
+let rebuildQueued = false;
+
+export async function rebuildDynamicRules(): Promise<void> {
+  if (activeRebuild) {
+    rebuildQueued = true;
+    return activeRebuild;
+  }
+  activeRebuild = (async () => {
+    do {
+      rebuildQueued = false;
+      await runRebuildDynamicRules();
+    } while (rebuildQueued);
+  })().finally(() => {
+    activeRebuild = null;
+  });
+  return activeRebuild;
 }

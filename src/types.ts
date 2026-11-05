@@ -61,3 +61,12 @@ export interface Suggestion {
   siteName: string;
   host: string;
 }
+
+// Input limits shared by every write surface (forms, import, popup, editor).
+// MAX_KEY_LENGTH also keeps per-rule DNR regexes well under Chrome's 2 KB
+// RE2 program limit (see src/dnr.ts).
+export const MAX_KEY_LENGTH = 64;
+export const MAX_LABEL_LENGTH = 256;
+export const MAX_URL_LENGTH = 2048;
+export const MAX_BUNDLE_URLS = 32;
+export const MAX_IMPORT_FILE_BYTES = 2 * 1024 * 1024; // 2 MB

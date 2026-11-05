@@ -1,6 +1,6 @@
 import { deleteShortcut, normalizeKey, renameShortcut, restoreShortcuts, touchShortcut, upsertShortcut } from './storage';
 import { icon } from './icons';
-import { Shortcut } from './types';
+import { MAX_KEY_LENGTH, Shortcut } from './types';
 import { deriveSearchFallbackUrl, normalizeUrl } from './suggest';
 
 export { deriveSearchFallbackUrl, normalizeUrl };
@@ -14,13 +14,66 @@ export function savedStatusMessage(key: string, totalShortcuts: number): string 
     : `Saved "${key}".`;
 }
 
+export function displayUrl(url: string): string {
+  try { return new URL(url).hostname; } catch { return url; }
+}
+
+export function formatBundlePreview(urls: string[] | undefined): string {
+  const list = urls ?? [];
+  const n = list.length;
+  const countText = `${n} ${n === 1 ? 'tab' : 'tabs'}`;
+  if (n === 0) return countText;
+  const hosts: string[] = [];
+  for (const u of list) {
+    const h = displayUrl(u).replace(/^www\./i, '');
+    if (h && !hosts.includes(h)) hosts.push(h);
+  }
+  if (hosts.length === 0) return countText;
+  const shown = hosts.slice(0, 2);
+  const extra = Math.max(0, n - shown.length);
+  return `${countText} · ${shown.join(', ')}${extra > 0 ? ` +${extra}` : ''}`;
+}
+
 // Human-readable destination for confirm prompts.
 export function describeTarget(s: Shortcut): string {
   if (s.type === 'bundle') {
-    const n = s.bundleUrls?.length ?? 0;
-    return `a bundle of ${n} ${n === 1 ? 'tab' : 'tabs'}`;
+    return formatBundlePreview(s.bundleUrls);
   }
   return displayUrl(s.urlTemplate ?? s.url);
+}
+
+export function groupShortcuts(shortcuts: Shortcut[]): Array<{ shortcut: Shortcut; isAlias: boolean }> {
+  const groupKey = (s: Shortcut) =>
+    s.type === 'bundle' ? `bundle:${s.key}` :
+    s.type === 'parameterized' ? (s.urlTemplate ?? s.url) :
+    s.url.replace(/\/+$/, '');
+
+  const urlGroups = new Map<string, Shortcut[]>();
+  for (const s of shortcuts) {
+    const k = groupKey(s);
+    if (!urlGroups.has(k)) urlGroups.set(k, []);
+    urlGroups.get(k)!.push(s);
+  }
+
+  const emitted = new Set<string>();
+  const result: Array<{ shortcut: Shortcut; isAlias: boolean }> = [];
+  for (const s of shortcuts) {
+    const k = groupKey(s);
+    if (emitted.has(k)) continue;
+    emitted.add(k);
+    urlGroups.get(k)!.forEach((gs, i) => result.push({ shortcut: gs, isAlias: i > 0 }));
+  }
+  return result;
+}
+
+export function hasShortcutTargetCollision(existing: Shortcut | undefined, candidate: Shortcut): boolean {
+  if (!existing) return false;
+  return (
+    existing.type !== candidate.type ||
+    (existing.urlTemplate ?? '') !== (candidate.urlTemplate ?? '') ||
+    existing.url !== candidate.url ||
+    JSON.stringify(existing.bundleUrls ?? []) !== JSON.stringify(candidate.bundleUrls ?? [])
+  );
 }
 
 // Inline collision prompt rendered into a form's status element: the keyword
@@ -86,15 +139,13 @@ export function showUndoToast(message: string, onUndo: () => void | Promise<void
 
 // Opens a shortcut the way the omnibar would: bundles open every tab.
 export function openShortcut(shortcut: Shortcut): void {
-  const urls = shortcut.type === 'bundle' && shortcut.bundleUrls?.length
+  const urls = (shortcut.type === 'bundle' && shortcut.bundleUrls?.length
     ? shortcut.bundleUrls
-    : [shortcut.url];
+    : [shortcut.url]
+  ).filter((u) => /^https?:\/\//i.test(u));
+  if (urls.length === 0) return;
   urls.forEach((url, i) => chrome.tabs.create({ url, active: i === 0 }));
   void touchShortcut(shortcut.key);
-}
-
-export function displayUrl(url: string): string {
-  try { return new URL(url).hostname; } catch { return url; }
 }
 
 // ── Delete confirmation state ('d' key / click verification) ──────────────────
@@ -123,7 +174,11 @@ export function cancelPendingDelete(): void {
   }
 }
 
-export function showDeleteConfirmToast(key: string, onCancel: () => void): void {
+export function showDeleteConfirmToast(
+  key: string,
+  onCancel: () => void,
+  onConfirm?: () => void,
+): void {
   if (typeof document === 'undefined') return;
   document.querySelector('.delete-confirm-toast')?.remove();
   document.querySelector('.undo-toast')?.remove();
@@ -133,7 +188,18 @@ export function showDeleteConfirmToast(key: string, onCancel: () => void): void 
   toast.setAttribute('role', 'alert');
 
   const text = document.createElement('span');
-  text.innerHTML = `Delete <strong>${key}</strong>? Press <kbd class="kbd">d</kbd> again to confirm`;
+  const strong = document.createElement('strong');
+  strong.textContent = key;
+  const kbd = document.createElement('kbd');
+  kbd.className = 'kbd';
+  kbd.textContent = 'd';
+  text.append(
+    document.createTextNode('Delete '),
+    strong,
+    document.createTextNode('? Press '),
+    kbd,
+    document.createTextNode(' again to confirm'),
+  );
 
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
@@ -143,7 +209,19 @@ export function showDeleteConfirmToast(key: string, onCancel: () => void): void 
     onCancel();
   });
 
-  toast.append(text, cancelBtn);
+  if (onConfirm) {
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'btn-sm danger confirm-delete-btn';
+    confirmBtn.textContent = 'Delete';
+    confirmBtn.addEventListener('click', () => {
+      onConfirm();
+    });
+    toast.append(text, confirmBtn, cancelBtn);
+  } else {
+    toast.append(text, cancelBtn);
+  }
+
   document.body.appendChild(toast);
 }
 
@@ -202,6 +280,8 @@ async function saveEdit(
   statusEl: HTMLDivElement,
   onRender: () => Promise<void>,
   urlTemplate?: string,
+  rawLabel?: string,
+  rawFallback?: string,
 ): Promise<void> {
   const newKey = normalizeKey(rawKey);
   statusEl.textContent = '';
@@ -210,23 +290,50 @@ async function saveEdit(
     statusEl.textContent = 'Keyword cannot be empty.';
     return;
   }
+  if (newKey.length > MAX_KEY_LENGTH) {
+    statusEl.textContent = `Keyword is too long (max ${MAX_KEY_LENGTH} characters).`;
+    return;
+  }
+
+  const trimmedLabel = (original.type === 'bundle' ? urlOrLabel : (rawLabel ?? '')).trim();
 
   try {
     let updated: Shortcut;
     if (original.type === 'redirect') {
       const url = normalizeUrl(urlOrLabel);
-      if (!url) { statusEl.textContent = 'Enter a URL.'; return; }
-      updated = { ...original, key: newKey, url };
+      if (!url) { statusEl.textContent = 'Enter a valid http(s) URL.'; return; }
+      updated = { ...original, key: newKey, url, label: trimmedLabel || undefined };
     } else if (original.type === 'parameterized') {
-      const template = urlTemplate?.trim() || '';
-      if (!template.includes('%s')) {
+      const rawTemplate = urlTemplate?.trim() || '';
+      if (!rawTemplate.includes('%s')) {
         statusEl.textContent = 'Search URL must include %s.';
         return;
       }
-      const fallbackUrl = deriveSearchFallbackUrl(template, urlOrLabel);
-      updated = { ...original, key: newKey, url: fallbackUrl, urlTemplate: template };
+      const normalizedTemplate = normalizeUrl(rawTemplate);
+      if (!normalizedTemplate) {
+        statusEl.textContent = 'Enter a valid http(s) search URL template.';
+        return;
+      }
+      const trimmedFallback = (rawFallback ?? '').trim();
+      let normalizedFallback: string | undefined;
+      if (trimmedFallback) {
+        const nf = normalizeUrl(trimmedFallback);
+        if (!nf) {
+          statusEl.textContent = 'Enter a valid http(s) fallback URL.';
+          return;
+        }
+        normalizedFallback = nf;
+      }
+      const fallbackUrl = deriveSearchFallbackUrl(normalizedTemplate, normalizedFallback);
+      updated = {
+        ...original,
+        key: newKey,
+        url: fallbackUrl,
+        urlTemplate: normalizedTemplate,
+        label: trimmedLabel || undefined,
+      };
     } else {
-      updated = { ...original, key: newKey, label: urlOrLabel.trim() || undefined };
+      updated = { ...original, key: newKey, label: trimmedLabel || undefined };
     }
 
     if (newKey !== original.key) {
@@ -237,6 +344,9 @@ async function saveEdit(
     }
     editingRow = null;
     await onRender();
+    if (typeof document !== 'undefined') {
+      document.querySelector<HTMLLIElement>(`li[data-key="${newKey}"]`)?.focus();
+    }
   } catch (err) {
     statusEl.textContent = (err as Error).message;
   }
@@ -291,10 +401,8 @@ export function buildShortcutRow(
   const urlLine = document.createElement('div');
   urlLine.className = 'url';
   if (shortcut.type === 'bundle') {
-    if (shortcut.label) {
-      const n = shortcut.bundleUrls?.length ?? 0;
-      urlLine.textContent = `${n} ${n === 1 ? 'tab' : 'tabs'}`;
-    }
+    urlLine.textContent = formatBundlePreview(shortcut.bundleUrls);
+    urlLine.title = (shortcut.bundleUrls ?? []).join('\n');
   } else if (shortcut.type === 'parameterized') {
     urlLine.textContent = shortcut.urlTemplate ?? displayUrl(shortcut.url);
     urlLine.title = shortcut.urlTemplate ?? shortcut.url;
@@ -329,6 +437,16 @@ export function buildShortcutRow(
     editBtn.addEventListener('click', () => openEdit(li));
   }
 
+  const confirmDelete = async () => {
+    cancelPendingDelete();
+    await deleteShortcut(shortcut.key);
+    await onRender();
+    showUndoToast(`Deleted "${shortcut.key}"`, async () => {
+      await restoreShortcuts([shortcut]);
+      await onRender();
+    });
+  };
+
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
   deleteBtn.className = 'btn-icon danger';
@@ -338,13 +456,7 @@ export function buildShortcutRow(
   deleteBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
     if (pendingDeleteKey === shortcut.key) {
-      cancelPendingDelete();
-      await deleteShortcut(shortcut.key);
-      await onRender();
-      showUndoToast(`Deleted "${shortcut.key}"`, async () => {
-        await restoreShortcuts([shortcut]);
-        await onRender();
-      });
+      await confirmDelete();
     } else {
       cancelPendingDelete();
       pendingDeleteKey = shortcut.key;
@@ -353,9 +465,11 @@ export function buildShortcutRow(
       deleteBtn.classList.add('confirm-delete');
       deleteBtn.title = `Press 'd' again to confirm`;
       deleteBtn.setAttribute('aria-label', `Press 'd' again to confirm deleting ${shortcut.key}`);
-      showDeleteConfirmToast(shortcut.key, () => {
-        cancelPendingDelete();
-      });
+      showDeleteConfirmToast(
+        shortcut.key,
+        () => { cancelPendingDelete(); },
+        () => { void confirmDelete(); },
+      );
       pendingDeleteTimer = setTimeout(() => {
         cancelPendingDelete();
       }, 4000);
@@ -387,29 +501,55 @@ export function buildShortcutRow(
   keyInput.value = shortcut.key;
   keyInput.placeholder = 'keyword';
   keyInput.autocomplete = 'off';
+  keyInput.setAttribute('aria-label', 'Shortcut keyword');
 
   const secondInput = document.createElement('input');
   secondInput.type = 'text';
+
+  let fallbackInput: HTMLInputElement | null = null;
+  let labelInput: HTMLInputElement | null = null;
+  const editInputs: HTMLInputElement[] = [keyInput, secondInput];
+
   if (shortcut.type === 'redirect') {
     secondInput.value = shortcut.url;
     secondInput.placeholder = 'google.com or https://...';
+    secondInput.setAttribute('aria-label', 'Target URL');
+
+    labelInput = document.createElement('input');
+    labelInput.type = 'text';
+    labelInput.value = shortcut.label ?? '';
+    labelInput.placeholder = 'Label (optional)';
+    labelInput.setAttribute('aria-label', 'Label (optional)');
+    editInputs.push(labelInput);
+  } else if (shortcut.type === 'parameterized') {
+    secondInput.value = shortcut.urlTemplate ?? '';
+    secondInput.placeholder = 'https://example.com/search?q=%s';
+    secondInput.setAttribute('aria-label', 'Search URL template');
+
+    fallbackInput = document.createElement('input');
+    fallbackInput.type = 'text';
+    fallbackInput.value = shortcut.url ?? '';
+    fallbackInput.placeholder = 'Fallback URL (optional)';
+    fallbackInput.setAttribute('aria-label', 'Fallback URL (optional)');
+
+    labelInput = document.createElement('input');
+    labelInput.type = 'text';
+    labelInput.value = shortcut.label ?? '';
+    labelInput.placeholder = 'Label (optional)';
+    labelInput.setAttribute('aria-label', 'Label (optional)');
+    editInputs.push(fallbackInput, labelInput);
   } else {
     secondInput.value = shortcut.label ?? '';
     secondInput.placeholder = 'Label (optional)';
-  }
-
-  let urlTemplateInput: HTMLInputElement | null = null;
-  if (shortcut.type === 'parameterized') {
-    secondInput.value = shortcut.urlTemplate ?? '';
-    secondInput.placeholder = 'https://site.com/search?q=%s';
-    urlTemplateInput = secondInput;
+    secondInput.setAttribute('aria-label', 'Label (optional)');
   }
 
   const editActions = document.createElement('div');
   editActions.className = 'edit-actions';
 
   const editStatus = document.createElement('div');
-  editStatus.className = 'edit-status';
+  editStatus.className = 'edit-status error';
+  editStatus.setAttribute('role', 'status');
 
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
@@ -417,11 +557,41 @@ export function buildShortcutRow(
   saveBtn.textContent = 'Save';
   saveBtn.addEventListener('click', () => {
     if (shortcut.type === 'parameterized') {
-      saveEdit(li, shortcut, keyInput.value, '', editStatus, onRender, secondInput.value);
+      void saveEdit(
+        li,
+        shortcut,
+        keyInput.value,
+        '',
+        editStatus,
+        onRender,
+        secondInput.value,
+        labelInput?.value ?? '',
+        fallbackInput?.value ?? '',
+      );
+    } else if (shortcut.type === 'redirect') {
+      void saveEdit(
+        li,
+        shortcut,
+        keyInput.value,
+        secondInput.value,
+        editStatus,
+        onRender,
+        undefined,
+        labelInput?.value ?? '',
+      );
     } else {
-      saveEdit(li, shortcut, keyInput.value, secondInput.value, editStatus, onRender);
+      void saveEdit(li, shortcut, keyInput.value, secondInput.value, editStatus, onRender);
     }
   });
+
+  for (const inp of editInputs) {
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        saveBtn.click();
+      }
+    });
+  }
 
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
@@ -444,12 +614,13 @@ export function buildShortcutRow(
   } else {
     editActions.append(saveBtn, cancelBtn);
   }
-  editForm.append(keyInput, secondInput, editActions, editStatus);
+  editForm.append(...editInputs, editActions, editStatus);
 
   const cb = document.createElement('input');
   cb.type = 'checkbox';
   cb.className = 'select-cb';
   cb.dataset.key = shortcut.key;
+  cb.setAttribute('aria-label', `Select ${shortcut.key}`);
 
   li.tabIndex = 0;
   li.dataset.url = shortcut.url;

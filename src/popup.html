@@ -25,6 +25,8 @@
 
       button[type="submit"] { margin-top: var(--s3); width: 100%; padding: 8px 10px; font-size: 13px; }
       #status { margin-top: var(--s2); font-size: 12px; min-height: 14px; color: var(--muted-foreground); }
+      #status.error { color: var(--destructive); }
+      #status.success { color: var(--success); }
 
       #openPanel {
         margin-top: var(--s2); width: 100%; display: inline-flex; align-items: center;
@@ -60,9 +62,9 @@
     </div>
     <form id="shortcutForm">
       <label for="shortcutKey">Keyword</label>
-      <input id="shortcutKey" type="text" autocomplete="off" />
+      <input id="shortcutKey" type="text" autocomplete="off" placeholder="keyword" aria-label="Shortcut keyword" />
       <label for="shortcutUrl">Destination URL</label>
-      <input id="shortcutUrl" type="text" placeholder="google.com or https://..." />
+      <input id="shortcutUrl" type="text" placeholder="google.com or https://..." aria-label="Target URL" />
       <div id="urlAncestors" class="url-ancestors"></div>
       <button type="submit" class="btn-primary">Save shortcut</button>
       <div id="status" role="status"></div>

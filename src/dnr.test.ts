@@ -101,6 +101,11 @@ describe('rebuildDynamicRules', () => {
       expect(regexOf(googleRuleFor('gh')).test('https://google.com/search?q=youtube')).toBe(false);
     });
 
+    it('matches when the query has trailing encoded whitespace (?q=gh+ or ?q=gh%20)', () => {
+      expect(regexOf(googleRuleFor('gh')).test('https://google.com/search?q=gh+')).toBe(true);
+      expect(regexOf(googleRuleFor('gh')).test('https://google.com/search?q=gh%20&hl=en')).toBe(true);
+    });
+
     // Regression: Chrome rejects rules whose compiled regex exceeds 2 KB, and
     // alternations are what blow that budget. One engine per rule keeps every
     // pattern far below the limit that used to reject the whole rule set.
@@ -168,6 +173,48 @@ describe('rebuildDynamicRules', () => {
         r => r.priority === 2 && r.condition.regexFilter?.startsWith('^https?://(?:www\\.)?google\\.'),
       );
       expect(regexOf(param).exec('https://google.com/search?q=yt+lofi+hip+hop')?.[1]).toBe('lofi+hip+hop');
+    });
+
+    it('capture-group regex stops before trailing query parameters (&oq=... or &form=QBLH)', () => {
+      const param = dnrRules.find(
+        r => r.priority === 2 && r.condition.regexFilter?.startsWith('^https?://(?:www\\.)?google\\.'),
+      );
+      expect(
+        regexOf(param).exec('https://www.google.com/search?q=yt+lofi+beats&oq=yt+lofi&ie=UTF-8')?.[1],
+      ).toBe('lofi+beats');
+    });
+
+    it('capture-group regex collapses multiple spaces after keyword without capturing leading +', () => {
+      const param = dnrRules.find(
+        r => r.priority === 2 && r.condition.regexFilter?.startsWith('^https?://(?:www\\.)?google\\.'),
+      );
+      expect(regexOf(param).exec('https://www.google.com/search?q=yt++lofi')?.[1]).toBe('lofi');
+      expect(regexOf(param).exec('https://www.google.com/search?q=yt+%20lofi')?.[1]).toBe('lofi');
+    });
+
+    it('does not capture &form=QBLH when keyword has trailing space and no search query (?q=yt+&form=QBLH)', () => {
+      const bingParam = dnrRules.find(
+        r => r.priority === 2 && r.condition.regexFilter?.includes('bing\\.com'),
+      );
+      const bingExact = dnrRules.find(
+        r => r.priority === 1 && r.condition.regexFilter?.includes('bing\\.com'),
+      );
+      expect(regexOf(bingParam).test('https://www.bing.com/search?q=yt+&form=QBLH')).toBe(false);
+      expect(regexOf(bingExact).test('https://www.bing.com/search?q=yt+&form=QBLH')).toBe(true);
+    });
+
+    it('escapes literal backslashes and replaces all %s occurrences in regexSubstitution', async () => {
+      syncStore[`${SHORTCUT_PREFIX}multi`] = {
+        key: 'multi',
+        url: 'https://example.com',
+        type: 'parameterized',
+        urlTemplate: 'https://example.com/%s?q=%s&p=a\\b',
+      };
+      await rebuildDynamicRules();
+      const param = dnrRules.find(
+        r => r.priority === 2 && r.condition.regexFilter?.includes('q=multi'),
+      );
+      expect(param?.action.redirect?.regexSubstitution).toBe('https://example.com/\\1?q=\\1&p=a\\\\b');
     });
   });
 });
@@ -241,6 +288,10 @@ describe('search-engine host scoping', () => {
     expect(isSearchEngineUrl('https://google.com/search?q=x')).toBe(true);
     expect(isSearchEngineUrl('https://duckduckgo.com/?q=x')).toBe(true);
     expect(isSearchEngineUrl('https://www.bing.com/search?q=x')).toBe(true);
+    expect(isSearchEngineUrl('https://www.bing.com/search/?q=x&form=QBLH')).toBe(true);
+    expect(isSearchEngineUrl('https://cn.bing.com/search?q=x')).toBe(true);
+    expect(isSearchEngineUrl('https://www2.bing.com/search?q=x')).toBe(true);
+    expect(isSearchEngineUrl('https://www4.bing.com/search/?q=x')).toBe(true);
     expect(isSearchEngineUrl('https://example.com/?q=x')).toBe(false);
     expect(isSearchEngineUrl('https://docs.google.com/document/u/0/?q=x')).toBe(false);
     expect(isSearchEngineUrl('https://drive.google.com/drive/u/0/search?q=x')).toBe(false);
@@ -248,15 +299,94 @@ describe('search-engine host scoping', () => {
   });
 });
 
-describe('malformed records', () => {
-  it('skips a shortcut with no URL instead of aborting the rebuild', async () => {
+describe('Google host hardening (TLD restriction)', () => {
+  it('still matches the Google host shapes Google actually operates', async () => {
+    await upsertShortcut({ key: 'gh', url: 'https://github.com', type: 'redirect' });
+    await rebuildDynamicRules();
+    for (const url of [
+      'https://google.com/search?q=gh',
+      'https://www.google.com/search?q=gh',
+      'https://www.google.co.uk/search?q=gh',
+      'https://google.com.au/search?q=gh',
+      'https://www.google.co.in/search?q=gh',
+      'https://google.ca/search?q=gh',
+      'https://google.de/search?q=gh',
+      'https://www.google.cat/search?q=gh',
+      'https://google.co/search?q=gh',
+      'https://www.google.com/webhp?q=gh',
+    ]) {
+      expect(matchesAnyRule(url)).toBe(true);
+    }
+  });
+
+  it('rejects attacker-registerable google.* lookalike hosts', async () => {
+    await upsertShortcut({ key: 'gh', url: 'https://github.com', type: 'redirect' });
+    await rebuildDynamicRules();
+    for (const url of [
+      'https://google.evil.com/search?q=gh',
+      'https://www.google.evil.com/search?q=gh',
+      'https://google.evil.co/?q=gh',
+      'https://google.co.uk.evil.com/search?q=gh',
+      'https://www.google.de.evil.com/search?q=gh',
+      'https://google.net.evil.io/search?q=gh',
+    ]) {
+      expect(matchesAnyRule(url)).toBe(false);
+    }
+  });
+
+  it('isSearchEngineUrl shares the hardened pattern', () => {
+    expect(isSearchEngineUrl('https://www.google.co.in/search?q=x')).toBe(true);
+    expect(isSearchEngineUrl('https://google.com.au/search?q=x')).toBe(true);
+    expect(isSearchEngineUrl('https://google.evil.com/search?q=x')).toBe(false);
+    expect(isSearchEngineUrl('https://www.google.evil.com/search?q=x')).toBe(false);
+    expect(isSearchEngineUrl('https://google.co.uk.evil.com/search?q=x')).toBe(false);
+  });
+});
+
+describe('malformed records and concurrency', () => {
+  it('skips a shortcut with no URL or unsafe/malformed URL instead of aborting the rebuild', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await chrome.storage.sync.set({
       [`${SHORTCUT_PREFIX}bad`]: { key: 'bad', url: '', type: 'redirect' },
+      [`${SHORTCUT_PREFIX}js`]: { key: 'js', url: 'javascript:alert(1)', type: 'redirect' },
+      [`${SHORTCUT_PREFIX}data`]: { key: 'data', url: 'data:text/html,hi', type: 'redirect' },
+      [`${SHORTCUT_PREFIX}file`]: { key: 'file', url: 'file:///etc/passwd', type: 'redirect' },
+      [`${SHORTCUT_PREFIX}hostless`]: { key: 'hostless', url: 'https://', type: 'redirect' },
+      [`${SHORTCUT_PREFIX}spaces`]: { key: 'spaces', url: 'https://bad host', type: 'redirect' },
       [`${SHORTCUT_PREFIX}ok`]: { key: 'ok', url: 'https://ok.com', type: 'redirect' },
     });
     await expect(rebuildDynamicRules()).resolves.toBeUndefined();
+    warn.mockRestore();
     expect(dnrRules).toHaveLength(ENGINE_COUNT);
     expect(dnrRules[0].condition.isUrlFilterCaseSensitive).toBe(false);
+  });
+
+  it('serializes concurrent rebuildDynamicRules calls without duplicate rule ID collisions', async () => {
+    syncStore[`${SHORTCUT_PREFIX}gh`] = { key: 'gh', url: 'https://github.com', type: 'redirect' };
+    syncStore[`${SHORTCUT_PREFIX}yt`] = { key: 'yt', url: 'https://youtube.com', type: 'redirect' };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await Promise.all([rebuildDynamicRules(), rebuildDynamicRules(), rebuildDynamicRules()]);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+
+    const ids = dnrRules.map(r => r.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(dnrRules).toHaveLength(ENGINE_COUNT * 2);
+  });
+
+  it('caps rules at MAX_DYNAMIC_RULES (5000) without throwing when store exceeds budget', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (let i = 0; i < 720; i++) {
+      syncStore[`${SHORTCUT_PREFIX}k${i}`] = {
+        key: `k${i}`,
+        url: `https://example.com/${i}`,
+        type: 'redirect',
+      };
+    }
+    await expect(rebuildDynamicRules()).resolves.toBeUndefined();
+    expect(dnrRules.length).toBeLessThanOrEqual(5000);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
 

@@ -6,5 +6,6 @@ dist/
 *.zip
 .github/prompts/chat.json
 *:Zone.Identifier
-OmniJump files/.codex/
+.codex/
+OmniJump files/
 skills-lock.json

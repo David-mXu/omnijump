@@ -14,7 +14,7 @@ export function devReload(): Plugin {
     buildStart() {
       failed = false;
       if (!wss) {
-        wss = new WebSocketServer({ port: PORT });
+        wss = new WebSocketServer({ port: PORT, host: '127.0.0.1' });
         console.log(`[dev-reload] listening on ws://localhost:${PORT}`);
       }
     },

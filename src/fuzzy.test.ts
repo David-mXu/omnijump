@@ -106,4 +106,28 @@ describe('fuzzyFilter', () => {
     const result = fuzzyFilter('yt', shortcuts);
     expect(result.length).toBeGreaterThan(0);
   });
+
+  it('matches urlTemplate on parameterized shortcuts and secondary bundleUrls on bundles', () => {
+    const mixed: Shortcut[] = [
+      {
+        key: 'searchdoc',
+        type: 'parameterized',
+        url: 'https://developer.mozilla.org',
+        urlTemplate: 'https://developer.mozilla.org/en-US/search?q=%s',
+      },
+      {
+        key: 'morning',
+        type: 'bundle',
+        url: 'https://news.ycombinator.com',
+        bundleUrls: ['https://news.ycombinator.com', 'https://linear.app/team/inbox'],
+      },
+    ];
+    expect(fuzzyFilter('en-US/search', mixed).map((s) => s.key)).toEqual(['searchdoc']);
+    expect(fuzzyFilter('linear.app', mixed).map((s) => s.key)).toEqual(['morning']);
+  });
+
+  it('guards against non-string inputs in fuzzyMatch and fuzzyScore', () => {
+    expect(fuzzyMatch('a', null as unknown as string)).toBe(false);
+    expect(fuzzyScore('a', undefined as unknown as string)).toBe(-Infinity);
+  });
 });

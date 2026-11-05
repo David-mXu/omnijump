@@ -1,5 +1,9 @@
 import { normalizeKey } from './storage';
 
+// URL validators live in url.ts (leaf module) so storage.ts can use them
+// without an import cycle. Re-exported here for existing importers.
+export { normalizeUrl, deriveSearchFallbackUrl } from './url';
+
 function extractBase(hostname: string): string {
   const cleaned = hostname.replace(/^www\./i, '');
   const parts = cleaned.split('.').filter(Boolean);
@@ -42,52 +46,6 @@ export function uniqueKey(base: string, existing: Set<string>): string {
     i += 1;
   }
   return `${base}${i}`;
-}
-
-export function normalizeUrl(input: string): string {
-  const s = input.trim();
-  if (!s) return s;
-  if (/^https?:\/\//i.test(s)) return s;
-  // Block non-http(s) schemes (javascript:, data:, vbscript:, file:, blob:, etc.)
-  if (/^[a-z][a-z0-9+\-.]*:/i.test(s)) return '';
-  return `https://${s}`;
-}
-
-export function deriveSearchFallbackUrl(template: string, explicitFallback?: string): string {
-  if (explicitFallback) {
-    const explicit = normalizeUrl(explicitFallback);
-    if (explicit) return explicit;
-  }
-  let raw = template.trim();
-  if (!raw) return '';
-  if (!/^https?:\/\//i.test(raw) && !raw.includes('://')) {
-    raw = `https://${raw}`;
-  }
-  try {
-    const u = new URL(raw);
-    const keysToDelete: string[] = [];
-    for (const [k, v] of u.searchParams.entries()) {
-      if (k.includes('%s') || v.includes('%s')) {
-        keysToDelete.push(k);
-      }
-    }
-    for (const k of keysToDelete) {
-      u.searchParams.delete(k);
-    }
-    if (u.hash.includes('%s')) {
-      u.hash = u.hash
-        .replace(/([?&#]|^#)[^?&#=]*=%s/g, '')
-        .replace(/%s/g, '')
-        .replace(/[?&=]+$/, '');
-      if (u.hash === '#') u.hash = '';
-    }
-    if (u.pathname.includes('%s')) {
-      u.pathname = u.pathname.replace(/%s/g, '');
-    }
-    return u.toString().replace(/[\?&#]+$/, '');
-  } catch {
-    return raw.replace(/%s/g, '').replace(/[\?&][^&=]*=(?=&|$)/g, '').replace(/[\?&#]+$/, '');
-  }
 }
 
 export function getUrlAncestors(url: string): string[] {

@@ -1,6 +1,7 @@
 import { Shortcut } from './types';
 
 export function fuzzyMatch(query: string, target: string): boolean {
+  if (typeof query !== 'string' || typeof target !== 'string') return false;
   const q = query.toLowerCase();
   const t = target.toLowerCase();
   let qi = 0;
@@ -12,6 +13,7 @@ export function fuzzyMatch(query: string, target: string): boolean {
 
 // Returns -Infinity when query doesn't match. Higher = better.
 export function fuzzyScore(query: string, target: string): number {
+  if (typeof query !== 'string' || typeof target !== 'string') return -Infinity;
   const q = query.toLowerCase();
   const t = target.toLowerCase();
 
@@ -39,6 +41,7 @@ export function fuzzyScore(query: string, target: string): number {
 }
 
 export function fuzzyFilter(query: string, shortcuts: Shortcut[]): Shortcut[] {
+  if (typeof query !== 'string' || !Array.isArray(shortcuts)) return [];
   const scored: Array<{ shortcut: Shortcut; score: number }> = [];
 
   for (const s of shortcuts) {
@@ -49,7 +52,18 @@ export function fuzzyFilter(query: string, shortcuts: Shortcut[]): Shortcut[] {
       ? fuzzyScore(query, hostname)
       : Math.max(fuzzyScore(query, hostname), fuzzyScore(query, s.url));
     const labelScore = s.label ? fuzzyScore(query, s.label) : -Infinity;
-    const best = Math.max(fuzzyScore(query, s.key), urlScore, labelScore);
+    const templateScore = typeof s.urlTemplate === 'string'
+      ? fuzzyScore(query, s.urlTemplate) * 0.8
+      : -Infinity;
+    let bundleScore = -Infinity;
+    if (Array.isArray(s.bundleUrls)) {
+      for (const bUrl of s.bundleUrls) {
+        if (typeof bUrl === 'string') {
+          bundleScore = Math.max(bundleScore, fuzzyScore(query, bUrl) * 0.8);
+        }
+      }
+    }
+    const best = Math.max(fuzzyScore(query, s.key), urlScore, labelScore, templateScore, bundleScore);
 
     if (best > -Infinity) scored.push({ shortcut: s, score: best });
   }

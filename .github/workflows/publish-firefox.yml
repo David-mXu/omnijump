@@ -5,6 +5,13 @@ on:
     tags:
       - 'firefox/v*'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-firefox
+  cancel-in-progress: false
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -21,6 +28,9 @@ jobs:
   publish-firefox:
     needs: test
     runs-on: ubuntu-latest
+    # Configure Required reviewers on this environment (Settings →
+    # Environments → firefox-addons) so AMO submissions need human approval.
+    environment: firefox-addons
     steps:
       - uses: actions/checkout@v7
 
@@ -33,10 +43,14 @@ jobs:
       - run: npm run build:firefox
 
       - name: Submit to Firefox Add-ons
+        # Secrets via env (never on argv): web-ext reads them natively, and
+        # the tool itself is the package.json-pinned copy with lockfile
+        # integrity via `npm ci` above — no floating npx downloads here.
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.FIREFOX_API_KEY }}
+          WEB_EXT_API_SECRET: ${{ secrets.FIREFOX_API_SECRET }}
         run: |
           npx web-ext sign \
             --channel=listed \
-            --api-key=${{ secrets.FIREFOX_API_KEY }} \
-            --api-secret=${{ secrets.FIREFOX_API_SECRET }} \
             --source-dir=dist/firefox \
             --artifacts-dir=web-ext-artifacts

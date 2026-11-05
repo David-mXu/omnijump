@@ -13,6 +13,14 @@ const BASE_PERMISSIONS: Manifest['permissions'] = [
   'tabs',
   'contextMenus',
   'webNavigation',
+  // NOTE (2026-11-05 audit, L4): both DNR permissions are required by Chrome —
+  // `declarativeNetRequestWithHostAccess` grants the ability to redirect URLs
+  // covered by host_permissions, while plain `declarativeNetRequest` is needed
+  // for rules on hosts NOT in host_permissions and keeps Firefox compatibility
+  // (Firefox ignores the WithHostAccess variant). They are not redundant.
+  // host_permissions is broader than the 7 intercepted search engines because
+  // the omnibar needs to observe navigation universally for the redirect
+  // fallback, bundle opening, and tip counting.
   'declarativeNetRequest',
   'declarativeNetRequestWithHostAccess',
 ];
@@ -49,6 +57,9 @@ export default function createManifest(target: BrowserTarget): Manifest {
       : { service_worker: 'src/background.ts', type: 'module' },
     permissions: BASE_PERMISSIONS,
     host_permissions: ['<all_urls>'],
+    content_security_policy: {
+      extension_pages: "script-src 'self'; object-src 'none'; base-uri 'none';",
+    },
     commands: isFirefox
       ? {
           '_execute_sidebar_action': {

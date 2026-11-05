@@ -95,22 +95,61 @@ describe('normalizeUrl', () => {
     expect(normalizeUrl('https://example.com')).toBe('https://example.com');
   });
 
-  it('blocks non-http(s) schemes', () => {
+  it('blocks non-http(s) schemes and obfuscated schemes', () => {
     expect(normalizeUrl('javascript:alert(1)')).toBe('');
     expect(normalizeUrl('data:text/html,test')).toBe('');
+    expect(normalizeUrl('vbscript:msgbox(1)')).toBe('');
     expect(normalizeUrl('file:///etc/passwd')).toBe('');
+    expect(normalizeUrl('chrome://extensions')).toBe('');
+    expect(normalizeUrl('edge://settings')).toBe('');
+    expect(normalizeUrl('about:blank')).toBe('');
+    expect(normalizeUrl('//evil.com/path')).toBe('');
+    expect(normalizeUrl('\x01javascript:alert(1)')).toBe('');
+    expect(normalizeUrl('java\tscript:alert(1)')).toBe('');
   });
 
-  it('handles empty input', () => {
+  it('rejects hostless, whitespace, single-label non-localhost, and %s-hostname URLs', () => {
+    expect(normalizeUrl('https://')).toBe('');
+    expect(normalizeUrl('http://')).toBe('');
+    expect(normalizeUrl('hello world')).toBe('');
+    expect(normalizeUrl('https://bad host.com')).toBe('');
+    expect(normalizeUrl('.example.com')).toBe('');
+    expect(normalizeUrl('example.com.')).toBe('');
+    expect(normalizeUrl('intranet')).toBe('');
+    expect(normalizeUrl('https://%s')).toBe('');
+    expect(normalizeUrl('https://%s/path')).toBe('');
+  });
+
+  it('accepts localhost, IPv4, IPv6, and valid %s templates', () => {
+    expect(normalizeUrl('http://localhost:3000/test')).toBe('http://localhost:3000/test');
+    expect(normalizeUrl('localhost:8080')).toBe('https://localhost:8080');
+    expect(normalizeUrl('http://127.0.0.1:8080')).toBe('http://127.0.0.1:8080');
+    expect(normalizeUrl('http://[::1]:8080')).toBe('http://[::1]:8080');
+    expect(normalizeUrl('https://example.com/search?q=%s')).toBe('https://example.com/search?q=%s');
+    expect(normalizeUrl('youtube.com/results?search_query=%s')).toBe('https://youtube.com/results?search_query=%s');
+  });
+
+  it('handles empty or non-string input', () => {
     expect(normalizeUrl('')).toBe('');
     expect(normalizeUrl('   ')).toBe('');
+    expect(normalizeUrl(null as unknown as string)).toBe('');
   });
 });
 
 describe('deriveSearchFallbackUrl', () => {
-  it('uses explicit fallback URL when valid', () => {
+  it('uses explicit fallback URL when valid and rejects unsafe explicit fallback', () => {
     expect(deriveSearchFallbackUrl('https://github.com/search?q=%s', 'github.com/explore'))
       .toBe('https://github.com/explore');
+    expect(deriveSearchFallbackUrl('https://github.com/search?q=%s', 'javascript:alert(1)'))
+      .toBe('');
+  });
+
+  it('rejects non-http(s) templates including schemes with ://', () => {
+    expect(deriveSearchFallbackUrl("javascript:alert('%s')")).toBe('');
+    expect(deriveSearchFallbackUrl('chrome://settings/%s')).toBe('');
+    expect(deriveSearchFallbackUrl('edge://settings/%s')).toBe('');
+    expect(deriveSearchFallbackUrl('file:///%s')).toBe('');
+    expect(deriveSearchFallbackUrl('data:text/html,%s')).toBe('');
   });
 
   it('removes query param containing %s and strips dangling ?', () => {

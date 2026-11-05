@@ -58,6 +58,17 @@ Google account that owns the item in the Developer Dashboard.
 Uploads go through Google's review; running without subcommands submits for
 review and publishes when approved.
 
+Both store-upload tools (`chrome-webstore-upload-cli`, `web-ext`) are pinned
+as devDependencies and installed via `npm ci`, so every publish run uses the
+lockfile-integrity-checked copy — never a floating `npx ...@latest` fetched
+next to store credentials. Keep them upgraded deliberately via
+`npm install -D chrome-webstore-upload-cli@X web-ext@Y`.
+
+The publish jobs run in GitHub environments (`chrome-store`,
+`firefox-addons`). Configure **Required reviewers** on those environments
+(Settings → Environments) so store submissions need a human approval before
+credentials are exposed to the job.
+
 ## Local dry run
 
 ```bash
@@ -66,10 +77,11 @@ EXTENSION_ID=... PUBLISHER_ID=... CLIENT_ID=... CLIENT_SECRET=... REFRESH_TOKEN=
   npx chrome-webstore-upload-cli --source dist/chrome
 ```
 
-## Firefox (not automated yet)
+## Firefox (automated via `publish-firefox.yml`)
 
-Mozilla's add-on store (AMO) has the same shape: `web-ext sign` with
-`WEB_EXT_API_KEY` / `WEB_EXT_API_SECRET` from
-https://addons.mozilla.org/developers/addon/api/key/. The Firefox zip is
-already produced by the workflow; add a `web-ext sign --channel listed` step
-once the add-on exists on AMO.
+Pushing a `firefox/v*` tag runs `.github/workflows/publish-firefox.yml`:
+test → build → `web-ext sign --channel listed`, using
+`WEB_EXT_API_KEY` / `WEB_EXT_API_SECRET` (from
+https://addons.mozilla.org/developers/addon/api/key/) stored as the
+`FIREFOX_API_KEY` / `FIREFOX_API_SECRET` repository secrets and passed via
+environment variables (never on the command line).

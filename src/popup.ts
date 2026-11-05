@@ -2,17 +2,34 @@ import './theme.css';
 import { IS_FIREFOX, openSidePanel } from './platform';
 import { SETTINGS_KEY, addDismissedHost, getStore, normalizeKey, upsertShortcut } from './storage';
 import { suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
-import { Suggestion } from './types';
-import { normalizeUrl, renderOverwriteConfirm, savedStatusMessage } from './ui';
+import { MAX_KEY_LENGTH, Shortcut, Suggestion } from './types';
+import { hasShortcutTargetCollision, normalizeUrl, renderOverwriteConfirm, savedStatusMessage } from './ui';
+
+try {
+  if (localStorage.getItem('omnijump_dark') === '1') {
+    document.body.classList.add('dark');
+  }
+} catch { /* ignore */ }
+
+function applyDarkMode(dark: boolean): void {
+  document.body.classList.toggle('dark', dark);
+  try {
+    localStorage.setItem('omnijump_dark', dark ? '1' : '0');
+  } catch { /* ignore */ }
+}
 
 const form = document.getElementById('shortcutForm') as HTMLFormElement | null;
 const keyInput = document.getElementById('shortcutKey') as HTMLInputElement | null;
 const urlInput = document.getElementById('shortcutUrl') as HTMLInputElement | null;
 const statusEl = document.getElementById('status') as HTMLDivElement | null;
 
-function setStatus(message: string): void {
+let autofillKey = '';
+let autofillUrl = '';
+
+function setStatus(message: string, kind: 'error' | 'success' | '' = ''): void {
   if (statusEl) {
     statusEl.textContent = message;
+    statusEl.className = kind;
   }
 }
 
@@ -21,7 +38,8 @@ function renderUrlAncestors(url: string): void {
   if (!container) return;
 
   container.innerHTML = '';
-  for (const ancestor of getUrlAncestors(url)) {
+  const ancestors = url ? getUrlAncestors(url) : [];
+  for (const ancestor of ancestors) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'url-ancestor-btn';
@@ -29,11 +47,23 @@ function renderUrlAncestors(url: string): void {
     btn.title = ancestor;
     btn.addEventListener('click', (e) => {
       e.preventDefault();
-      if (urlInput) urlInput.value = ancestor;
+      if (urlInput) {
+        urlInput.value = ancestor;
+        renderUrlAncestors(ancestor);
+      }
     });
     container.appendChild(btn);
   }
 }
+
+urlInput?.addEventListener('input', () => {
+  const normalized = normalizeUrl(urlInput.value);
+  renderUrlAncestors(normalized || urlInput.value);
+});
+urlInput?.addEventListener('change', () => {
+  const normalized = normalizeUrl(urlInput.value);
+  renderUrlAncestors(normalized || urlInput.value);
+});
 
 function showSuggestion(s: Suggestion, tabId: number): void {
   const el = document.getElementById('suggestion');
@@ -43,15 +73,38 @@ function showSuggestion(s: Suggestion, tabId: number): void {
   text.textContent = `You often visit ${s.siteName}. Save "${s.key}" as a shortcut?`;
   el.hidden = false;
 
+  const isDirty =
+    (keyInput && keyInput.value !== '' && keyInput.value !== autofillKey) ||
+    (urlInput && urlInput.value !== '' && urlInput.value !== autofillUrl);
+
+  if (!isDirty) {
+    if (keyInput) {
+      keyInput.value = s.key;
+      autofillKey = s.key;
+    }
+    if (urlInput) {
+      urlInput.value = s.url;
+      autofillUrl = s.url;
+      renderUrlAncestors(s.url);
+    }
+  }
+
   document.getElementById('saveSuggestion')?.addEventListener('click', async () => {
     try {
-      await upsertShortcut({ key: s.key, url: s.url, type: 'redirect' });
+      const store = await getStore();
+      // Validate at the write boundary like every other save path.
+      const url = normalizeUrl(s.url);
+      if (!url) {
+        setStatus('Suggested URL is invalid.', 'error');
+        return;
+      }
+      await upsertShortcut({ key: s.key, url, type: 'redirect' });
       await chrome.storage.session.remove(`suggestion_${tabId}`);
       await chrome.action.setBadgeText({ tabId, text: '' });
       el.hidden = true;
-      setStatus(`Saved "${s.key}".`);
+      setStatus(savedStatusMessage(s.key, Object.keys(store.shortcuts).length + 1), 'success');
     } catch (err) {
-      setStatus((err as Error).message);
+      setStatus(err instanceof Error ? err.message : 'Failed to save shortcut.', 'error');
     }
   });
 
@@ -68,15 +121,18 @@ function showSuggestion(s: Suggestion, tabId: number): void {
 async function init(): Promise<void> {
   try {
     const store = await getStore();
-    document.body.classList.toggle('dark', store.settings.darkMode ?? false);
+    applyDarkMode(store.settings.darkMode ?? false);
 
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab?.url && urlInput) {
+    if (tab?.url && /^https?:\/\//i.test(tab.url) && urlInput) {
       urlInput.value = tab.url;
+      autofillUrl = tab.url;
       renderUrlAncestors(tab.url);
       const suggested = suggestKeyFromUrl(tab.url);
       if (keyInput && suggested) {
-        keyInput.value = suggested;
+        const unique = uniqueKey(suggested, new Set(Object.keys(store.shortcuts)));
+        keyInput.value = unique;
+        autofillKey = unique;
         keyInput.focus();
         keyInput.select();
       }
@@ -87,7 +143,7 @@ async function init(): Promise<void> {
       if (suggestion) showSuggestion(suggestion, tab.id);
     }
   } catch (error) {
-    setStatus('Failed to read active tab.');
+    setStatus('Failed to read active tab.', 'error');
     console.error(error);
   }
 }
@@ -95,9 +151,9 @@ async function init(): Promise<void> {
 async function persistShortcut(key: string, url: string, totalAfter: number): Promise<void> {
   try {
     await upsertShortcut({ key, url, type: 'redirect' });
-    setStatus(savedStatusMessage(key, totalAfter));
+    setStatus(savedStatusMessage(key, totalAfter), 'success');
   } catch (error) {
-    setStatus('Failed to save shortcut.');
+    setStatus(error instanceof Error ? error.message : 'Failed to save shortcut.', 'error');
     console.error(error);
   }
 }
@@ -112,7 +168,11 @@ form?.addEventListener('submit', async (event) => {
   const url = normalizeUrl(urlInput.value);
 
   if (!key || !url) {
-    setStatus('Enter a keyword and URL.');
+    setStatus('Enter a keyword and valid http(s) URL.', 'error');
+    return;
+  }
+  if (key.length > MAX_KEY_LENGTH) {
+    setStatus(`Keyword is too long (${key.length} chars, max ${MAX_KEY_LENGTH}).`, 'error');
     return;
   }
 
@@ -120,9 +180,10 @@ form?.addEventListener('submit', async (event) => {
     const store = await getStore();
     const existing = store.shortcuts[key];
     const total = Object.keys(store.shortcuts).length;
+    const candidate: Shortcut = { key, url, type: 'redirect' };
 
     // Same key pointing elsewhere: ask instead of silently renaming or clobbering.
-    if (existing && existing.url !== url && statusEl) {
+    if (existing && hasShortcutTargetCollision(existing, candidate) && statusEl) {
       const alt = uniqueKey(key, new Set(Object.keys(store.shortcuts)));
       renderOverwriteConfirm(
         statusEl,
@@ -136,12 +197,12 @@ form?.addEventListener('submit', async (event) => {
 
     await persistShortcut(key, url, existing ? total : total + 1);
   } catch (error) {
-    setStatus('Failed to save shortcut.');
+    setStatus(error instanceof Error ? error.message : 'Failed to save shortcut.', 'error');
     console.error(error);
   }
 });
 
-init();
+void init();
 
 document.getElementById('openPanel')?.addEventListener('click', async () => {
   // Firefox: sidebarAction.open() must be called synchronously within the user
@@ -161,6 +222,6 @@ document.getElementById('openPanel')?.addEventListener('click', async () => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'sync' && SETTINGS_KEY in changes) {
     const newSettings = changes[SETTINGS_KEY]?.newValue as { darkMode?: boolean } | undefined;
-    document.body.classList.toggle('dark', newSettings?.darkMode ?? false);
+    applyDarkMode(newSettings?.darkMode ?? false);
   }
 });

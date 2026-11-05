@@ -180,10 +180,11 @@
       .cta-row {
         display: flex;
         align-items: center;
+        flex-wrap: wrap;
         gap: var(--s3);
         margin-top: var(--s5);
       }
-      #closeBtn { padding: 10px 22px; font-size: 14px; font-weight: 600; }
+      #closeBtn, #openOptionsBtn { padding: 10px 22px; font-size: 14px; font-weight: 600; }
       .cta-row span { font-size: 12px; color: var(--muted-foreground); }
     </style>
   </head>
@@ -249,6 +250,7 @@
       <div class="tips">
         <h2>Good to know</h2>
         <ul>
+          <li><b>17 starter shortcuts pre-loaded:</b> Try <span class="key">gh</span>, <span class="key">yt</span>, <span class="key">wiki</span>, <span class="key">maps</span>, <span class="key">mail</span>, <span class="key">chat</span>, or <span class="key">claude</span> in your address bar right away.</li>
           <li><b>Can't remember a keyword?</b> Type <span class="key">oj</span> then a space in the address bar to browse and autocomplete your shortcuts.</li>
           <li><b>Keyword also a real search?</b> Add any second word (except on search shortcuts) and OmniJump stays out of the way.</li>
           <li><b>Manage everything</b> in the side panel — press <span class="key" id="panelShortcut">Alt+Shift+A</span> or click "Open full panel" in the popup.</li>
@@ -263,6 +265,7 @@
 
       <div class="cta-row">
         <button type="button" id="closeBtn" class="btn-primary">Got it — start jumping</button>
+        <button type="button" id="openOptionsBtn" class="btn-secondary">View &amp; customize shortcuts</button>
         <span>You can reopen the panel any time from the toolbar icon.</span>
       </div>
     </div>
