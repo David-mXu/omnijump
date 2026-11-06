@@ -634,6 +634,39 @@ describe('6. Smart Tips Engine (handleSmartTip)', () => {
     expect(counts['google.co.uk']).toBeUndefined();
   });
 
+  it('never triggers smart tips for localhost / loopback hosts', async () => {
+    const loopbackUrls = [
+      'http://localhost:3000/dev-server',
+      'http://api.localhost:3000/tenant',
+      'http://127.0.0.1:8080/admin',
+      'http://[::1]:3000/page',
+    ];
+
+    for (const targetUrl of loopbackUrls) {
+      for (let i = 0; i < 4; i++) {
+        await asMockEvent(chrome.webNavigation.onCommitted).emit({
+          tabId: 6,
+          frameId: 0,
+          url: targetUrl,
+        });
+        await asMockEvent(chrome.webNavigation.onCommitted).emit({
+          tabId: 6,
+          frameId: 0,
+          url: `https://uncovered-${i}.example.org/`,
+        });
+      }
+    }
+    await flushPromises(60);
+
+    const counts = (sessionStore['searchVisitCounts'] ?? {}) as Record<string, number>;
+    expect(counts['localhost']).toBeUndefined();
+    expect(counts['api.localhost']).toBeUndefined();
+    expect(counts['127.0.0.1']).toBeUndefined();
+    expect(counts['[::1]']).toBeUndefined();
+    expect(sessionStore['suggestion_6']).toBeUndefined();
+    expect(chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 6, text: 'TIP' });
+  });
+
   it('clears suggestion_${tabId} and TIP badge when navigating away to a site with < 3 visits, a blocklisted search engine, or a non-HTTP URL', async () => {
     // Seed 2 prior visits to github.com so next visit triggers TIP
     sessionStore['searchVisitCounts'] = { 'github.com': 2 };

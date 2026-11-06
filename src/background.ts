@@ -60,6 +60,14 @@ function isBlocklisted(host: string): boolean {
   for (const domain of SEARCH_ENGINE_BLOCKLIST) {
     if (host.endsWith('.' + domain)) return true;
   }
+  // Loopback / local-dev hosts: visit counting is keyed by hostname (no port),
+  // and the suggested shortcut URL is rebuilt as `${protocol}//${host}/`, so a
+  // suggestion for "localhost" would drop the port and produce a dead
+  // http://localhost/ shortcut. Never suggest them. WHATWG URL normalizes
+  // forms like 127.1 to 127.0.0.1, and IPv6 hostnames keep their brackets.
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  if (/^127(?:\.\d{1,3}){3}$/.test(host)) return true;
+  if (host === '[::1]') return true;
   return false;
 }
 
