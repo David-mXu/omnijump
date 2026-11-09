@@ -1,8 +1,22 @@
 import { getStore } from './storage';
 import { Shortcut } from './types';
 
-// Chrome's guaranteed budget for dynamic rules.
+// Chrome's guaranteed total budget. Every rule OmniJump builds also uses a
+// regexFilter, so the lower (by default 1,000) regex-specific quota applies.
 const MAX_DYNAMIC_RULES = 5000;
+const DEFAULT_MAX_REGEX_RULES = 1000;
+
+function maxAvailableRegexRules(): number {
+  // Firefox exposes both constants. Older @types/chrome declarations omit the
+  // total-rule constant, so keep the documented fallback for both browsers.
+  const dnr = chrome.declarativeNetRequest as typeof chrome.declarativeNetRequest & {
+    MAX_NUMBER_OF_DYNAMIC_RULES?: number;
+  };
+  return Math.min(
+    dnr.MAX_NUMBER_OF_DYNAMIC_RULES ?? MAX_DYNAMIC_RULES,
+    dnr.MAX_NUMBER_OF_REGEX_RULES ?? DEFAULT_MAX_REGEX_RULES,
+  );
+}
 
 // Chrome compiles regexFilter with RE2 and rejects any rule whose compiled
 // program exceeds 2 KB. Alternations are expensive, so a regex that embeded the
@@ -99,6 +113,7 @@ interface BuiltRules {
 function buildRules(shortcuts: Shortcut[]): BuiltRules {
   const rules: chrome.declarativeNetRequest.Rule[] = [];
   const skippedKeys: string[] = [];
+  const maxRegexRules = maxAvailableRegexRules();
   let id = 1;
 
   const resourceTypes = ['main_frame'] as chrome.declarativeNetRequest.ResourceType[];
@@ -119,7 +134,7 @@ function buildRules(shortcuts: Shortcut[]): BuiltRules {
     const parameterized = shortcut.type === 'parameterized' && isSafeRedirectUrl(shortcut.urlTemplate, true);
     const rulesPerShortcut = SEARCH_ENGINES.length * (parameterized ? 2 : 1);
 
-    if (rules.length + rulesPerShortcut > MAX_DYNAMIC_RULES) {
+    if (rules.length + rulesPerShortcut > maxRegexRules) {
       skippedKeys.push(shortcut.key);
       continue;
     }

@@ -374,7 +374,11 @@ describe('malformed records and concurrency', () => {
     expect(dnrRules).toHaveLength(ENGINE_COUNT * 2);
   });
 
-  it('caps rules at MAX_DYNAMIC_RULES (5000) without throwing when store exceeds budget', async () => {
+  it('caps rules at MAX_DYNAMIC_RULES (5000) when the regex quota is higher', async () => {
+    Object.defineProperty(chrome.declarativeNetRequest, 'MAX_NUMBER_OF_REGEX_RULES', {
+      configurable: true,
+      value: 5000,
+    });
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     for (let i = 0; i < 720; i++) {
       syncStore[`${SHORTCUT_PREFIX}k${i}`] = {
@@ -386,6 +390,45 @@ describe('malformed records and concurrency', () => {
     await expect(rebuildDynamicRules()).resolves.toBeUndefined();
     expect(dnrRules.length).toBeLessThanOrEqual(5000);
     expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('caps rules at the real 1,000-regex Firefox quota without partial engine coverage', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const update = vi.mocked(chrome.declarativeNetRequest.updateDynamicRules);
+    for (let i = 0; i < 143; i++) {
+      syncStore[`${SHORTCUT_PREFIX}k${i}`] = {
+        key: `k${i}`,
+        url: `https://example.com/${i}`,
+        type: 'redirect',
+      };
+    }
+    await rebuildDynamicRules();
+
+    expect(dnrRules).toHaveLength(994);
+    expect(dnrRules).toHaveLength(142 * ENGINE_COUNT);
+    expect(dnrRules.some(rule => rule.condition.regexFilter?.includes('q=k142'))).toBe(false);
+    expect(warn.mock.calls.some(call => String(call[0]).includes('k142'))).toBe(true);
+    // Do not enter the per-rule recovery loop for an over-quota bulk update.
+    expect(update).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('deducts both exact and parameterized rules from the regex quota', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (let i = 0; i < 72; i++) {
+      syncStore[`${SHORTCUT_PREFIX}p${i}`] = {
+        key: `p${i}`,
+        url: 'https://example.com/',
+        urlTemplate: `https://example.com/search?q=%s&page=${i}`,
+        type: 'parameterized',
+      };
+    }
+    await rebuildDynamicRules();
+
+    expect(dnrRules).toHaveLength(71 * ENGINE_COUNT * 2);
+    expect(dnrRules.some(rule => rule.condition.regexFilter?.includes('q=p71'))).toBe(false);
+    expect(warn.mock.calls.some(call => String(call[0]).includes('p71'))).toBe(true);
     warn.mockRestore();
   });
 });

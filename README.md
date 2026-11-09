@@ -33,7 +33,7 @@ Type a keyword you've saved → hit Enter → you're there. That's it.
 | **Side panel & Options page** | Full management panel (`Alt+Shift+A`) and full-page options view with 100% feature parity — add, edit, delete, filter (auto-shown at `filterThreshold`, default `10`), and bulk-manage shortcuts. |
 | **Quick-save popup** | Save the current tab from the toolbar popup (`Alt+Shift+S`) with auto-suggested keyword and overwrite protection. |
 | **Export / Import** | Back up and restore all shortcuts as JSON. |
-| **Live sync** | Changes sync across all your signed-in Chrome devices via `chrome.storage.sync`. |
+| **Live sync** | Changes sync across signed-in Chrome and Firefox devices via `chrome.storage.sync`. |
 | **Stale auto-delete** | Optionally remove shortcuts that haven't been used in N days. |
 | **Keyboard navigation** | `Alt+Shift+A` for side panel, `Alt+Shift+S` for popup, plus j/k to move, Enter to open, e to edit, d to delete — all without a mouse. |
 | **Context menu** | Right-click any page or link to save it as a shortcut instantly. |
@@ -57,7 +57,7 @@ All shortcut data lives in `chrome.storage.sync` — one key per shortcut (`omni
 | **Language** | TypeScript 5 |
 | **Build** | Vite 5 + `@crxjs/vite-plugin` |
 | **Extension API** | Manifest V3 — `declarativeNetRequest`, `storage`, `webNavigation`, `sidePanel`, `tabs`, `contextMenus` |
-| **Targets** | Chrome 120+ · Firefox 128+ |
+| **Targets** | Chrome 120+ · Firefox 140+ |
 | **Testing** | Vitest (unit tests, Node environment, in-memory Chrome API mocks) |
 | **CI** | GitHub Actions — type-check → test on every push |
 

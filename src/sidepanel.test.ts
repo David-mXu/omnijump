@@ -1,7 +1,11 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createChromeMock } from './test/chrome-mock';
 import { createDomMock, MockElement } from './test/dom-mock';
 import { DAILY_KEY, getStore, saveSettings, upsertShortcut } from './storage';
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 async function flushPromises(): Promise<void> {
   for (let i = 0; i < 15; i++) {
@@ -232,6 +236,21 @@ describe.each([
       getItem: vi.fn(() => null),
       setItem: vi.fn(),
     };
+  });
+
+  describe('Firefox settings shortcut help', () => {
+    it('hides the Chrome-only shortcut settings button and shows about:addons instructions', async () => {
+      vi.stubEnv('MODE', 'firefox');
+      await loadModule();
+      await flushPromises();
+      await els.tabSettings.click();
+      await flushPromises();
+
+      expect(els.dom.doc.getElementById('customizeShortcut')?.hidden).toBe(true);
+      const hint = els.dom.doc.getElementById('firefoxShortcutHint');
+      expect(hint?.hidden).toBe(false);
+      expect(mockChrome.chrome.tabs.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('Adding redirect and parameterized (%s) search shortcuts', () => {
