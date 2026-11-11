@@ -1,7 +1,23 @@
 import { isSearchEngineUrl, rebuildDynamicRules } from './dnr';
 import { fuzzyFilter } from './fuzzy';
 import { IS_FIREFOX, openSidePanel } from './platform';
-import { SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, cleanupStaleShortcuts, getDismissedHosts, getStore, migrateFromLegacyStorage, normalizeKey, seedStarterShortcuts, touchShortcut, upsertShortcut } from './storage';
+import {
+  SETTINGS_KEY,
+  SHORTCUT_PREFIX,
+   cleanupStaleShortcuts,
+  clearSessionStore,
+  coerceShortcutRecord,
+  getDismissedHosts,
+  getStore,
+  migrateFromLegacyStorage,
+  mirrorSessionDelta,
+  normalizeKey,
+  readSessionStore,
+  seedStarterShortcuts,
+  touchShortcut,
+  upsertShortcut,
+  writeSessionStore,
+} from './storage';
 import { suggestKeyFromUrl, uniqueKey } from './suggest';
 import { DEFAULT_SETTINGS, Shortcut, ShortcutStore, Suggestion } from './types';
 import { startDevReload } from './dev-reload';
@@ -12,30 +28,60 @@ const IS_EDGE = /\bEdg\//i.test(globalThis.navigator?.userAgent ?? '');
 
 let cachedStore: ShortcutStore | null = null;
 let storeLoadPromise: Promise<ShortcutStore> | null = null;
+let storeGeneration = 0;
+
+const MAX_STORE_LOAD_RETRIES = 4;
 
 function invalidateStoreCache(): void {
   cachedStore = null;
   storeLoadPromise = null;
+  storeGeneration++;
+}
+
+function findShortcut(store: ShortcutStore, key: string): Shortcut | undefined {
+  return Object.prototype.hasOwnProperty.call(store.shortcuts, key)
+    ? store.shortcuts[key]
+    : undefined;
+}
+
+async function loadStoreFromTiers(retriesLeft: number): Promise<ShortcutStore> {
+  const gen = storeGeneration;
+
+  // Tier 2: RAM-backed chrome.storage.session (~1 ms IPC across MV3 SW restarts)
+  const fromSession = await readSessionStore();
+  if (gen !== storeGeneration) {
+    return retriesLeft > 0 ? loadStoreFromTiers(retriesLeft - 1) : getStore();
+  }
+  if (fromSession) {
+    cachedStore = fromSession;
+    return fromSession;
+  }
+
+  // Tier 3: authoritative chrome.storage.sync, hydrating Tier 1 + Tier 2
+  const fromSync = await getStore();
+  if (gen !== storeGeneration) {
+    return retriesLeft > 0 ? loadStoreFromTiers(retriesLeft - 1) : fromSync;
+  }
+  cachedStore = fromSync;
+  void writeSessionStore(fromSync);
+  return fromSync;
 }
 
 async function getFastStore(): Promise<ShortcutStore> {
   if (cachedStore) return cachedStore;
   if (!storeLoadPromise) {
-    const p = getStore()
-      .then((store) => {
-        if (storeLoadPromise === p) {
-          cachedStore = store;
-        }
-        return store;
-      })
-      .finally(() => {
-        if (storeLoadPromise === p) {
-          storeLoadPromise = null;
-        }
-      });
+    const p = loadStoreFromTiers(MAX_STORE_LOAD_RETRIES).finally(() => {
+      if (storeLoadPromise === p) {
+        storeLoadPromise = null;
+      }
+    });
     storeLoadPromise = p;
   }
   return storeLoadPromise;
+}
+
+function warmStore(): void {
+  void getFastStore().catch(() => {});
 }
 
 async function syncRules(): Promise<void> {
@@ -139,7 +185,7 @@ async function handleBundleNavigation(url: string, tabId: number): Promise<void>
   }
 
   const store = await getFastStore();
-  const shortcut = store.shortcuts[parsed.key];
+  const shortcut = findShortcut(store, parsed.key);
 
   if (!shortcut || shortcut.type !== 'bundle' || !shortcut.bundleUrls?.length) {
     return;
@@ -282,40 +328,56 @@ function handleSmartTip(url: string, tabId: number): Promise<void> {
   });
 }
 
-chrome.runtime.onStartup.addListener(async () => {
-  await migrateFromLegacyStorage();
-  await cleanupStaleShortcuts();
-  invalidateStoreCache();
-  void getFastStore();
-  syncRules();
-});
+let bootQueue: Promise<void> = Promise.resolve();
 
-chrome.runtime.onInstalled.addListener(async (details) => {
-  if (details.reason === 'install') {
-    await seedStarterShortcuts();
-    chrome.tabs.create({ url: chrome.runtime.getURL('src/onboarding.html') });
-  }
+function enqueueBootTask(task: () => Promise<void>): Promise<void> {
+  const next = bootQueue.then(task, task);
+  bootQueue = next.catch(() => {});
+  return next;
+}
 
-  await migrateFromLegacyStorage();
-  await cleanupStaleShortcuts();
-  invalidateStoreCache();
-  void getFastStore();
-  syncRules();
+chrome.runtime.onStartup.addListener(() =>
+  enqueueBootTask(async () => {
+    invalidateStoreCache();
+    await clearSessionStore();
+    await migrateFromLegacyStorage();
+    await cleanupStaleShortcuts();
+    invalidateStoreCache();
+    warmStore();
+    syncRules();
+  })
+);
 
-  chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({
-      id: 'omnijump-save-page',
-      title: 'Save Page as Shortcut',
-      contexts: ['page'],
+chrome.runtime.onInstalled.addListener((details) =>
+  enqueueBootTask(async () => {
+    invalidateStoreCache();
+    await clearSessionStore();
+    if (details.reason === 'install') {
+      await seedStarterShortcuts();
+      chrome.tabs.create({ url: chrome.runtime.getURL('src/onboarding.html') });
+    }
+
+    await migrateFromLegacyStorage();
+    await cleanupStaleShortcuts();
+    invalidateStoreCache();
+    warmStore();
+    syncRules();
+
+    chrome.contextMenus.removeAll(() => {
+      chrome.contextMenus.create({
+        id: 'omnijump-save-page',
+        title: 'Save Page as Shortcut',
+        contexts: ['page'],
+      });
+
+      chrome.contextMenus.create({
+        id: 'omnijump-save-link',
+        title: 'Save Link as Shortcut',
+        contexts: ['link'],
+      });
     });
-
-    chrome.contextMenus.create({
-      id: 'omnijump-save-link',
-      title: 'Save Link as Shortcut',
-      contexts: ['link'],
-    });
-  });
-});
+  })
+);
 
 let syncRulesTimer: ReturnType<typeof setTimeout> | null = null;
 const boundChrome = globalThis.chrome;
@@ -357,7 +419,9 @@ function applyChangesToCachedStore(
     return;
   }
 
+  const now = Date.now();
   for (const [key, change] of Object.entries(changes)) {
+    if (!Object.prototype.hasOwnProperty.call(changes, key)) continue;
     if (key.startsWith(SHORTCUT_PREFIX)) {
       const storageSuffix = normalizeKey(key.slice(SHORTCUT_PREFIX.length));
       const oldShortcut = change.oldValue as Shortcut | undefined;
@@ -369,15 +433,19 @@ function applyChangesToCachedStore(
         delete cachedStore.shortcuts[storageSuffix];
       }
 
-      if (change.newValue && typeof change.newValue === 'object') {
-        const raw = change.newValue as Shortcut;
-        const normKey = normalizeKey(raw.key || key.slice(SHORTCUT_PREFIX.length));
-        if (normKey) {
-          cachedStore.shortcuts[normKey] = { ...raw, key: normKey };
-        }
+      const coerced = coerceShortcutRecord(
+        change.newValue,
+        key.slice(SHORTCUT_PREFIX.length),
+        now
+      );
+      if (coerced) {
+        cachedStore.shortcuts[coerced.key] = coerced;
       }
     } else if (key === SETTINGS_KEY) {
-      const nextSettings = (change.newValue ?? {}) as Partial<ShortcutStore['settings']>;
+      const nextSettings =
+        change.newValue && typeof change.newValue === 'object' && !Array.isArray(change.newValue)
+          ? (change.newValue as Partial<ShortcutStore['settings']>)
+          : {};
       cachedStore.settings = { ...DEFAULT_SETTINGS, ...nextSettings };
     }
   }
@@ -385,7 +453,15 @@ function applyChangesToCachedStore(
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'sync') return;
-  applyChangesToCachedStore(changes);
+  const touchesStore = Object.keys(changes).some(
+    (k) => k === SETTINGS_KEY || k.startsWith(SHORTCUT_PREFIX)
+  );
+  if (touchesStore) {
+    storeGeneration++;
+    storeLoadPromise = null;
+    applyChangesToCachedStore(changes);
+    void mirrorSessionDelta(changes);
+  }
 
   let shouldRebuild = false;
   for (const [key, change] of Object.entries(changes)) {
@@ -475,6 +551,18 @@ chrome.commands.onCommand.addListener((command, tab) => {
   }
 });
 
+// Pre-warm the store on tab creation, tab switch, and window focus so the
+// MV3 service worker is awake and cachedStore is hot in RAM before the user
+// finishes typing a keyword in the address bar.
+chrome.tabs.onCreated.addListener(warmStore);
+chrome.tabs.onActivated.addListener(warmStore);
+chrome.windows?.onFocusChanged?.addListener((windowId) => {
+  const none = chrome.windows?.WINDOW_ID_NONE ?? -1;
+  if (windowId !== none) {
+    warmStore();
+  }
+});
+
 chrome.tabs.onRemoved.addListener((tabId) => {
   recentBundleTriggers.delete(tabId);
   recentJsRedirects.delete(tabId);
@@ -500,7 +588,7 @@ async function handleShortcutTouch(url: string): Promise<void> {
   const parsed = parseSearchQuery(url);
   if (!parsed) return;
   const store = await getFastStore();
-  const shortcut = store.shortcuts[parsed.key];
+  const shortcut = findShortcut(store, parsed.key);
   if (!shortcut) return;
   if (parsed.hasArgs && shortcut.type !== 'parameterized') return;
   await touchShortcut(parsed.key);
@@ -516,7 +604,7 @@ async function handleJsRedirect(url: string, tabId: number): Promise<boolean> {
   if (!parsed) return false;
 
   const store = await getFastStore();
-  const shortcut = store.shortcuts[parsed.key];
+  const shortcut = findShortcut(store, parsed.key);
   if (!shortcut) return false;
 
   let target: string | null = null;
@@ -624,7 +712,7 @@ chrome.omnibox.onInputEntered.addListener(async (text, disposition) => {
 
   const store = await getFastStore();
   // Exact key first, else the best fuzzy match for a half-typed keyword.
-  const shortcut = store.shortcuts[key] ?? fuzzyFilter(key, Object.values(store.shortcuts))[0];
+  const shortcut = findShortcut(store, key) ?? fuzzyFilter(key, Object.values(store.shortcuts))[0];
   if (!shortcut) return;
 
   const args = parts.slice(1).join(' ');

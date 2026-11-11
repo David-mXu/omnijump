@@ -15,6 +15,17 @@ export const SETTINGS_KEY = 'omnibar_settings';
 export const SHORTCUT_PREFIX = 'omnibar_s_';
 export const DAILY_KEY = 'omnibar_daily';
 export const DISMISSED_KEY = 'omnibar_dismissed';
+export const SESSION_STORE_META_KEY = 'omnibar_store_meta';
+export const STORE_MIRROR_VERSION = 1 as const;
+
+export interface SessionStoreMeta {
+  v: typeof STORE_MIRROR_VERSION;
+}
+
+export interface StorageChangeLike {
+  oldValue?: unknown;
+  newValue?: unknown;
+}
 
 // Dismissed suggestion hosts are browsing-derived data, so they live in
 // storage.local instead of storage.sync — they should not travel to every
@@ -203,27 +214,177 @@ export function sanitizeShortcut(raw: unknown, now: number): SanitizeResult {
   return { ok: true, shortcut: { key, type, url, label, createdAt, lastUsed, useCount } };
 }
 
-export async function getStore(): Promise<ShortcutStore> {
-  const all = await chrome.storage.sync.get(null);
+export function coerceShortcutRecord(
+  raw: unknown,
+  fallbackKey: string,
+  now = Date.now(),
+): Shortcut | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const candidate = raw as Shortcut;
+  const key = normalizeKey(candidate.key || fallbackKey);
+  if (!key) return null;
+  return coerceStoredShortcut(candidate, key, now);
+}
+
+export function parseStoreFromRecords(
+  all: Record<string, unknown>,
+  now = Date.now(),
+): ShortcutStore {
   const shortcuts: Record<string, Shortcut> = {};
   let settings: UserSettings = DEFAULT_SETTINGS;
-  const now = Date.now();
 
   for (const [k, v] of Object.entries(all)) {
     if (k === SETTINGS_KEY) {
-      if (v && typeof v === 'object') {
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
         settings = { ...DEFAULT_SETTINGS, ...(v as UserSettings) };
       }
     } else if (k.startsWith(SHORTCUT_PREFIX)) {
-      if (!v || typeof v !== 'object') continue;
-      const rawShortcut = v as Shortcut;
-      const key = normalizeKey(rawShortcut.key || k.slice(SHORTCUT_PREFIX.length));
-      if (!key) continue;
-      shortcuts[key] = coerceStoredShortcut(rawShortcut, key, now);
+      const coerced = coerceShortcutRecord(v, k.slice(SHORTCUT_PREFIX.length), now);
+      if (coerced) {
+        shortcuts[coerced.key] = coerced;
+      }
     }
   }
 
   return { shortcuts, settings };
+}
+
+function hasSessionStorage(): boolean {
+  return Boolean(
+    globalThis.chrome?.storage?.session &&
+      typeof globalThis.chrome.storage.session.get === 'function' &&
+      typeof globalThis.chrome.storage.session.set === 'function' &&
+      typeof globalThis.chrome.storage.session.remove === 'function',
+  );
+}
+
+let sessionMirrorQueue: Promise<void> = Promise.resolve();
+
+function enqueueSessionOp(task: () => Promise<void>): Promise<void> {
+  const next = sessionMirrorQueue.then(task, task).catch(() => {});
+  sessionMirrorQueue = next;
+  return next;
+}
+
+// Reads the RAM-backed session mirror when valid, or null on cold browser
+// startup / missing sentinel / corrupted metadata so callers fall back to sync.
+export async function readSessionStore(): Promise<ShortcutStore | null> {
+  if (!hasSessionStorage()) return null;
+  try {
+    const all = (await chrome.storage.session.get(null)) as Record<string, unknown>;
+    const meta = all[SESSION_STORE_META_KEY] as SessionStoreMeta | undefined;
+    if (!meta || typeof meta !== 'object' || Array.isArray(meta) || meta.v !== STORE_MIRROR_VERSION) {
+      return null;
+    }
+    return parseStoreFromRecords(all);
+  } catch {
+    return null;
+  }
+}
+
+// Writes a complete authoritative store snapshot to chrome.storage.session,
+// purging any deleted/renamed shortcut keys before stamping the sentinel.
+export function writeSessionStore(store: ShortcutStore): Promise<void> {
+  if (!hasSessionStorage()) return Promise.resolve();
+  const desired: Record<string, unknown> = {
+    [SETTINGS_KEY]: store.settings,
+  };
+  for (const [key, shortcut] of Object.entries(store.shortcuts)) {
+    if (!Object.prototype.hasOwnProperty.call(store.shortcuts, key)) continue;
+    desired[`${SHORTCUT_PREFIX}${key}`] = shortcut;
+  }
+
+  return enqueueSessionOp(async () => {
+    const prevAll = (await chrome.storage.session.get(null)) as Record<string, unknown>;
+    const staleKeys = Object.keys(prevAll).filter(
+      (k) => (k.startsWith(SHORTCUT_PREFIX) || k === SETTINGS_KEY) && !(k in desired),
+    );
+    if (staleKeys.length > 0) {
+      await chrome.storage.session.remove(staleKeys);
+    }
+    await chrome.storage.session.set({
+      ...desired,
+      [SESSION_STORE_META_KEY]: { v: STORE_MIRROR_VERSION } satisfies SessionStoreMeta,
+    });
+  });
+}
+
+// Applies an idempotent per-key delta to the session mirror. When the mirror
+// has not been initialized yet and `hydrateIfMissing` is true, hydrates from a
+// fresh post-write `getStore()` read inside the serialized queue so concurrent
+// saves can never purge each other's keys via a stale pre-write snapshot.
+export function mirrorSessionDelta(
+  changes: Record<string, StorageChangeLike>,
+  options: { hydrateIfMissing?: boolean } = {},
+): Promise<void> {
+  if (!hasSessionStorage()) return Promise.resolve();
+  const sets: Record<string, unknown> = {};
+  const removes: string[] = [];
+
+  for (const [key, change] of Object.entries(changes)) {
+    if (!Object.prototype.hasOwnProperty.call(changes, key)) continue;
+    if (key !== SETTINGS_KEY && !key.startsWith(SHORTCUT_PREFIX)) continue;
+    if (change?.newValue !== undefined) {
+      sets[key] = change.newValue;
+    } else {
+      removes.push(key);
+    }
+  }
+
+  if (Object.keys(sets).length === 0 && removes.length === 0) {
+    return Promise.resolve();
+  }
+
+  return enqueueSessionOp(async () => {
+    const metaRes = await chrome.storage.session.get(SESSION_STORE_META_KEY);
+    const meta = metaRes[SESSION_STORE_META_KEY] as SessionStoreMeta | undefined;
+    if (!meta || typeof meta !== 'object' || meta.v !== STORE_MIRROR_VERSION) {
+      if (!options.hydrateIfMissing) {
+        return;
+      }
+      const fresh = await getStore();
+      const desired: Record<string, unknown> = {
+        [SETTINGS_KEY]: fresh.settings,
+        [SESSION_STORE_META_KEY]: { v: STORE_MIRROR_VERSION } satisfies SessionStoreMeta,
+      };
+      for (const [k, s] of Object.entries(fresh.shortcuts)) {
+        if (Object.prototype.hasOwnProperty.call(fresh.shortcuts, k)) {
+          desired[`${SHORTCUT_PREFIX}${k}`] = s;
+        }
+      }
+      await chrome.storage.session.set(desired);
+      return;
+    }
+    if (removes.length > 0) {
+      await chrome.storage.session.remove(removes);
+    }
+    if (Object.keys(sets).length > 0) {
+      await chrome.storage.session.set(sets);
+    }
+  });
+}
+
+// Clears the session mirror sentinel and cached shortcut/settings keys without
+// disturbing unrelated session state (bundleTriggers, smart-tip visit counts).
+export function clearSessionStore(): Promise<void> {
+  if (!hasSessionStorage()) return Promise.resolve();
+  return enqueueSessionOp(async () => {
+    const prevAll = (await chrome.storage.session.get(null)) as Record<string, unknown>;
+    const toRemove = Object.keys(prevAll).filter(
+      (k) =>
+        k === SESSION_STORE_META_KEY ||
+        k === SETTINGS_KEY ||
+        k.startsWith(SHORTCUT_PREFIX),
+    );
+    if (toRemove.length > 0) {
+      await chrome.storage.session.remove(toRemove);
+    }
+  });
+}
+
+export async function getStore(): Promise<ShortcutStore> {
+  const all = await chrome.storage.sync.get(null);
+  return parseStoreFromRecords(all);
 }
 
 export async function upsertShortcut(shortcut: Shortcut): Promise<ShortcutStore> {
@@ -234,14 +395,14 @@ export async function upsertShortcut(shortcut: Shortcut): Promise<ShortcutStore>
     throw new Error('Shortcut key is empty after normalization.');
   }
 
-  const isNew = !store.shortcuts[key];
+  const isNew = !Object.prototype.hasOwnProperty.call(store.shortcuts, key);
   const max = store.settings.maxShortcuts ?? DEFAULT_SETTINGS.maxShortcuts;
 
   if (isNew && Object.keys(store.shortcuts).length >= max) {
     throw new Error(`Shortcut limit reached (${max}).`);
   }
 
-  const existing = store.shortcuts[key];
+  const existing = isNew ? undefined : store.shortcuts[key];
   let normalized: Shortcut = {
     ...shortcut,
     key,
@@ -267,11 +428,16 @@ export async function upsertShortcut(shortcut: Shortcut): Promise<ShortcutStore>
   }
 
   store.shortcuts[key] = normalized;
+  await mirrorSessionDelta(
+    { [`${SHORTCUT_PREFIX}${key}`]: { newValue: normalized } },
+    { hydrateIfMissing: true },
+  );
   return store;
 }
 
 export async function saveSettings(settings: UserSettings): Promise<void> {
   await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
+  await mirrorSessionDelta({ [SETTINGS_KEY]: { newValue: settings } });
 }
 
 // One-time migration from the old single-key format (both sync and local) to per-key sync storage.
@@ -309,6 +475,9 @@ export async function migrateFromLegacyStorage(): Promise<void> {
 
   if (Object.keys(writes).length > 0) {
     await chrome.storage.sync.set(writes);
+    await mirrorSessionDelta(
+      Object.fromEntries(Object.entries(writes).map(([k, v]) => [k, { newValue: v }])),
+    );
   }
 
   await Promise.all([
@@ -320,7 +489,9 @@ export async function migrateFromLegacyStorage(): Promise<void> {
 export async function deleteShortcut(key: string): Promise<ShortcutStore> {
   const normalized = normalizeKey(key);
   if (normalized) {
-    await chrome.storage.sync.remove(`${SHORTCUT_PREFIX}${normalized}`);
+    const storageKey = `${SHORTCUT_PREFIX}${normalized}`;
+    await chrome.storage.sync.remove(storageKey);
+    await mirrorSessionDelta({ [storageKey]: { newValue: undefined } });
   }
   return getStore();
 }
@@ -332,7 +503,23 @@ export async function deleteShortcuts(keys: string[]): Promise<void> {
     .map((k) => normalizeKey(k))
     .filter(Boolean)
     .map((k) => `${SHORTCUT_PREFIX}${k}`);
-  if (storageKeys.length > 0) await chrome.storage.sync.remove(storageKeys);
+  if (storageKeys.length > 0) {
+    await chrome.storage.sync.remove(storageKeys);
+    await mirrorSessionDelta(
+      Object.fromEntries(storageKeys.map((k) => [k, { newValue: undefined }])),
+    );
+  }
+}
+
+// Writes a pre-validated batch of shortcut records in one storage operation
+// (used by JSON import to respect chrome.storage.sync per-minute write quotas)
+// while keeping the session mirror coherent.
+export async function bulkWriteShortcuts(writes: Record<string, Shortcut>): Promise<void> {
+  if (Object.keys(writes).length === 0) return;
+  await chrome.storage.sync.set(writes);
+  await mirrorSessionDelta(
+    Object.fromEntries(Object.entries(writes).map(([k, v]) => [k, { newValue: v }])),
+  );
 }
 
 // Restores deleted shortcuts (keeping stats and timestamps), in one
@@ -347,7 +534,9 @@ export async function restoreShortcuts(shortcuts: Shortcut[]): Promise<void> {
     const result = sanitizeShortcut(s, now);
     if (result.ok) writes[`${SHORTCUT_PREFIX}${result.shortcut.key}`] = result.shortcut;
   }
-  if (Object.keys(writes).length > 0) await chrome.storage.sync.set(writes);
+  if (Object.keys(writes).length > 0) {
+    await bulkWriteShortcuts(writes);
+  }
 }
 
 let touchQueue: Promise<void> = Promise.resolve();
@@ -377,12 +566,17 @@ export function touchShortcut(key: string): Promise<void> {
         if (k < cutoff) delete counts[k];
       }
 
+      const updated: Shortcut = {
+        ...shortcut,
+        key: normalized,
+        lastUsed: now,
+        useCount: (shortcut.useCount ?? 0) + 1,
+      };
       await Promise.all([
-        chrome.storage.sync.set({
-          [storageKey]: { ...shortcut, key: normalized, lastUsed: now, useCount: (shortcut.useCount ?? 0) + 1 },
-        }),
+        chrome.storage.sync.set({ [storageKey]: updated }),
         chrome.storage.local.set({ [DAILY_KEY]: counts }),
       ]);
+      await mirrorSessionDelta({ [storageKey]: { newValue: updated } });
     } catch {
       // Ignore quota / rate-limit errors during usage tracking
     }
@@ -433,6 +627,14 @@ export async function renameShortcut(originalKey: string, updated: Shortcut): Pr
     }
     throw err;
   }
+
+  const delta: Record<string, StorageChangeLike> = {
+    [newStorageKey]: { newValue: normalized },
+  };
+  if (newKey !== oldKey && oldKey) {
+    delta[oldStorageKey] = { newValue: undefined };
+  }
+  await mirrorSessionDelta(delta);
 }
 
 export async function clearAllStats(): Promise<void> {
@@ -452,6 +654,11 @@ export async function clearAllStats(): Promise<void> {
     chrome.storage.local.remove(DAILY_KEY),
     Object.keys(writes).length > 0 ? chrome.storage.sync.set(writes) : Promise.resolve(),
   ]);
+  if (Object.keys(writes).length > 0) {
+    await mirrorSessionDelta(
+      Object.fromEntries(Object.entries(writes).map(([k, v]) => [k, { newValue: v }])),
+    );
+  }
 }
 
 export async function cleanupStaleShortcuts(): Promise<void> {
@@ -468,9 +675,12 @@ export async function cleanupStaleShortcuts(): Promise<void> {
     // "used today". Records with neither timestamp get createdAt stamped now.
     const reference = shortcut.lastUsed ?? shortcut.createdAt;
     if (reference === undefined) {
-      toGrace[`${SHORTCUT_PREFIX}${key}`] = { ...shortcut, createdAt: now };
+      const graced = { ...shortcut, createdAt: now };
+      toGrace[`${SHORTCUT_PREFIX}${key}`] = graced;
+      store.shortcuts[key] = graced;
     } else if (reference < cutoff) {
       toDelete.push(`${SHORTCUT_PREFIX}${key}`);
+      delete store.shortcuts[key];
     }
   }
 
@@ -478,6 +688,12 @@ export async function cleanupStaleShortcuts(): Promise<void> {
   if (toDelete.length > 0) ops.push(chrome.storage.sync.remove(toDelete));
   if (Object.keys(toGrace).length > 0) ops.push(chrome.storage.sync.set(toGrace));
   await Promise.all(ops);
+  if (toDelete.length > 0 || Object.keys(toGrace).length > 0) {
+    const delta: Record<string, StorageChangeLike> = {};
+    for (const k of toDelete) delta[k] = { newValue: undefined };
+    for (const [k, v] of Object.entries(toGrace)) delta[k] = { newValue: v };
+    await mirrorSessionDelta(delta);
+  }
 }
 
 export async function seedStarterShortcuts(overwriteExisting = false): Promise<number> {
@@ -492,21 +708,26 @@ export async function seedStarterShortcuts(overwriteExisting = false): Promise<n
   for (const s of STARTER_SHORTCUTS) {
     const key = normalizeKey(s.key);
     if (!key) continue;
-    const exists = Boolean(store.shortcuts[key]);
+    const exists = Object.prototype.hasOwnProperty.call(store.shortcuts, key);
     if (!overwriteExisting && exists) continue;
     if (!exists && newCount >= maxToAdd) continue;
-    items[`${SHORTCUT_PREFIX}${key}`] = {
+    const record: Shortcut = {
       ...s,
       key,
       createdAt: now,
       useCount: 0,
     };
+    items[`${SHORTCUT_PREFIX}${key}`] = record;
     if (!exists) newCount++;
     addedCount++;
   }
 
   if (addedCount > 0) {
     await chrome.storage.sync.set(items);
+    await mirrorSessionDelta(
+      Object.fromEntries(Object.entries(items).map(([k, v]) => [k, { newValue: v }])),
+      { hydrateIfMissing: true },
+    );
   }
   return addedCount;
 }

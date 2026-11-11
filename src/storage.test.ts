@@ -5,7 +5,14 @@ import {
   SHORTCUT_PREFIX,
   DAILY_KEY,
   DISMISSED_KEY,
+  SESSION_STORE_META_KEY,
+  STORE_MIRROR_VERSION,
+  bulkWriteShortcuts,
+  clearSessionStore,
   getStore,
+  mirrorSessionDelta,
+  readSessionStore,
+  writeSessionStore,
   upsertShortcut,
   deleteShortcut,
   deleteShortcuts,
@@ -24,12 +31,14 @@ import { DEFAULT_SETTINGS, STARTER_SHORTCUTS } from './types';
 
 let syncStore: Record<string, unknown>;
 let localStore: Record<string, unknown>;
+let sessionStore: Record<string, unknown>;
 
 beforeEach(() => {
   const mock = createChromeMock();
   globalThis.chrome = mock.chrome;
   syncStore = mock.syncStore;
   localStore = mock.localStore;
+  sessionStore = mock.sessionStore;
 });
 
 describe('getStore', () => {
@@ -652,5 +661,117 @@ describe('seedStarterShortcuts', () => {
     expect(added).toBe(5);
     const store = await getStore();
     expect(Object.keys(store.shortcuts)).toHaveLength(5);
+  });
+});
+
+describe('session mirror helpers (readSessionStore / writeSessionStore / mirrorSessionDelta)', () => {
+  it('returns null when session mirror sentinel is absent or has a wrong version', async () => {
+    expect(await readSessionStore()).toBeNull();
+
+    sessionStore[`${SHORTCUT_PREFIX}gh`] = { key: 'gh', url: 'https://github.com', type: 'redirect' };
+    expect(await readSessionStore()).toBeNull();
+
+    sessionStore[SESSION_STORE_META_KEY] = { v: 999 };
+    expect(await readSessionStore()).toBeNull();
+
+    sessionStore[SESSION_STORE_META_KEY] = 'not-an-object';
+    expect(await readSessionStore()).toBeNull();
+  });
+
+  it('writes full snapshots, purges removed keys, and ignores unrelated session state', async () => {
+    sessionStore['bundleTriggers'] = { 7: 12345 };
+    sessionStore[`${SHORTCUT_PREFIX}stale`] = {
+      key: 'stale',
+      url: 'https://stale.example.com',
+      type: 'redirect',
+    };
+
+    await writeSessionStore({
+      shortcuts: {
+        gh: { key: 'gh', url: 'https://github.com', type: 'redirect' },
+      },
+      settings: { ...DEFAULT_SETTINGS, smartSuggestions: true },
+    });
+
+    expect(sessionStore['bundleTriggers']).toEqual({ 7: 12345 });
+    expect(sessionStore[`${SHORTCUT_PREFIX}stale`]).toBeUndefined();
+    expect(sessionStore[SESSION_STORE_META_KEY]).toEqual({ v: STORE_MIRROR_VERSION });
+
+    const cached = await readSessionStore();
+    expect(cached?.shortcuts.gh?.url).toBe('https://github.com');
+    expect(cached?.settings.smartSuggestions).toBe(true);
+
+    await clearSessionStore();
+    expect(await readSessionStore()).toBeNull();
+    expect(sessionStore['bundleTriggers']).toEqual({ 7: 12345 });
+  });
+
+  it('keeps the session mirror coherent across upsert, rename, bulkWrite, deleteShortcuts, restore, settings, and touch', async () => {
+    await upsertShortcut({ key: 'gh', url: 'https://github.com', type: 'redirect' });
+    expect((await readSessionStore())?.shortcuts.gh?.url).toBe('https://github.com');
+
+    await renameShortcut('gh', { key: 'git', url: 'https://github.com/trending', type: 'redirect' });
+    let snap = await readSessionStore();
+    expect(snap?.shortcuts.gh).toBeUndefined();
+    expect(snap?.shortcuts.git?.url).toBe('https://github.com/trending');
+
+    await bulkWriteShortcuts({
+      [`${SHORTCUT_PREFIX}docs`]: { key: 'docs', url: 'https://docs.example.com', type: 'redirect' },
+    });
+    expect((await readSessionStore())?.shortcuts.docs?.url).toBe('https://docs.example.com');
+
+    await deleteShortcuts(['git', 'docs']);
+    snap = await readSessionStore();
+    expect(snap?.shortcuts.git).toBeUndefined();
+    expect(snap?.shortcuts.docs).toBeUndefined();
+
+    await restoreShortcuts([
+      { key: 'gh', url: 'https://github.com', type: 'redirect', useCount: 9, lastUsed: 1234 },
+    ]);
+    expect((await readSessionStore())?.shortcuts.gh?.useCount).toBe(9);
+
+    await saveSettings({ ...DEFAULT_SETTINGS, darkMode: true });
+    expect((await readSessionStore())?.settings.darkMode).toBe(true);
+
+    await touchShortcut('gh');
+    expect((await readSessionStore())?.shortcuts.gh?.useCount).toBe(10);
+  });
+
+  it('preserves both shortcuts in the session mirror when concurrent upsertShortcut calls race', async () => {
+    await upsertShortcut({ key: 'base', url: 'https://base.example.com', type: 'redirect' });
+
+    await Promise.all([
+      upsertShortcut({ key: 'first', url: 'https://first.example.com', type: 'redirect' }),
+      upsertShortcut({ key: 'second', url: 'https://second.example.com', type: 'redirect' }),
+    ]);
+
+    const mirrored = await readSessionStore();
+    expect(mirrored?.shortcuts.base?.url).toBe('https://base.example.com');
+    expect(mirrored?.shortcuts.first?.url).toBe('https://first.example.com');
+    expect(mirrored?.shortcuts.second?.url).toBe('https://second.example.com');
+  });
+
+  it('leaves sentinel unset when mirrorSessionDelta runs before initial hydration', async () => {
+    await mirrorSessionDelta({
+      [`${SHORTCUT_PREFIX}partial`]: {
+        newValue: { key: 'partial', url: 'https://partial.example.com', type: 'redirect' },
+      },
+    });
+    // Must not mark partial delta as an authoritative full snapshot
+    expect(await readSessionStore()).toBeNull();
+  });
+
+  it('degrades gracefully when chrome.storage.session is unavailable or throws quota errors', async () => {
+    vi.mocked(chrome.storage.session.set).mockRejectedValueOnce(new Error('QUOTA_BYTES exceeded'));
+    await expect(
+      upsertShortcut({ key: 'gh', url: 'https://github.com', type: 'redirect' }),
+    ).resolves.toBeDefined();
+
+    // Simulate environment without storage.session
+    (chrome.storage as unknown as Record<string, unknown>).session = undefined;
+    expect(await readSessionStore()).toBeNull();
+    await expect(
+      upsertShortcut({ key: 'yt', url: 'https://youtube.com', type: 'redirect' }),
+    ).resolves.toBeDefined();
   });
 });

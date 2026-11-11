@@ -46,7 +46,7 @@ Ensure to commit and push changes when appropriate.
 2. On every storage change, `background.ts` calls `rebuildDynamicRules()` from `dnr.ts`, which clears all existing DNR dynamic rules and re-adds rules built from the full current store. Rule IDs are positional (`index + 1`).
 3. DNR rules match omnibar searches by intercepting the search engine URL (e.g. `https://google.com/search?q=gh`) via a regex on the `q=` query parameter and redirecting to the shortcut's target URL. **Each shortcut gets one rule per search engine** (`SEARCH_ENGINES` in `dnr.ts`), not one rule covering every engine: Chrome compiles `regexFilter` with RE2 and rejects any rule whose compiled program exceeds 2 KB, which the old combined host-alternation regex did — and because a bulk `updateDynamicRules` call is atomic, that single rejection silently disabled every shortcut. Keep per-rule regexes short; `src/dnr.test.ts` guards their length. `isSearchEngineUrl()` builds the same engine list into one uncompiled JS regex for the service worker's navigation listeners, so `?q=` on unrelated sites is never intercepted. If Chrome still rejects a bulk update, `applyRules()` retries rule by rule so only the offending keyword is lost.
 4. For `bundle` shortcuts, the DNR rule redirects to the first URL. The service worker also listens on `webNavigation.onBeforeNavigate`, detects bundle keyword matches, and opens the remaining URLs as background tabs.
-5. In Microsoft Edge (which suppresses extension DNR `redirect` rules on the configured default search engine origin), `background.ts` also runs `handleJsRedirect` on `webNavigation.onBeforeNavigate` backed by an in-memory `cachedStore` for instant pre-network redirects, while keeping `webNavigation.onCommitted` as a deduplicated universal safety net.
+5. In Microsoft Edge (which suppresses extension DNR `redirect` rules on the configured default search engine origin), `background.ts` also runs `handleJsRedirect` on `webNavigation.onBeforeNavigate` backed by a 3-tier `getFastStore()` lookup (in-memory `cachedStore` → per-key `chrome.storage.session` mirror gated by `omnibar_store_meta` → `chrome.storage.sync`), pre-warmed on `tabs.onCreated` / `tabs.onActivated` / `windows.onFocusChanged` so cold MV3 service workers redirect without waiting on `storage.sync.get(null)` IPC, while keeping `webNavigation.onCommitted` as a deduplicated universal safety net.
 
 **Shortcut types**:
 - `redirect`: single URL target, handled entirely by DNR.
@@ -105,9 +105,9 @@ Tests live alongside source files (`*.test.ts`) and use **Vitest** with a Node e
 |------|----------------|
 | `src/suggest.test.ts` | `normalizeKey`, `suggestKeyFromUrl`, `uniqueKey` |
 | `src/fuzzy.test.ts` | Fuzzy matching, scoring, and ranking for omnibox autocomplete |
-| `src/storage.test.ts` | `getStore`, `upsertShortcut`, `deleteShortcut`, `saveSettings`, `migrateFromLegacyStorage`, starter seeding |
+| `src/storage.test.ts` | `getStore`, `upsertShortcut`, `deleteShortcut`, `saveSettings`, `migrateFromLegacyStorage`, starter seeding, `chrome.storage.session` mirror coherence |
 | `src/dnr.test.ts` | `rebuildDynamicRules`, rule IDs, parameterized rules, DNR regex correctness and RE2 length bounds |
-| `src/background.test.ts` | Service worker listeners, `handleJsRedirect`, bundle deduplication, smart tips, omnibox suggestions |
+| `src/background.test.ts` | Service worker listeners, `handleJsRedirect`, session-cache cold restart & pre-warming, bundle deduplication, smart tips, omnibox suggestions |
 | `src/ui.test.ts` | `buildShortcutRow`, inline row editor (keyword, URL/template, fallback URL, label), `openShortcut`, undo toast |
 | `src/popup.test.ts` | Quick-save popup flow, auto-suggested keys, overwrite confirmation |
 | `src/sidepanel.test.ts` | Side panel & options controller (`panel-controller.ts`), tabs, filter bar, bulk select/delete, bundle editing |

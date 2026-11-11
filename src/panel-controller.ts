@@ -1,7 +1,7 @@
 import './theme.css';
 import { icon } from './icons';
 import { IS_FIREFOX } from './platform';
-import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, clearAllStats, deleteShortcuts, getStore, normalizeKey, renameShortcut, restoreShortcuts, sanitizeShortcut, saveSettings, seedStarterShortcuts, upsertShortcut } from './storage';
+import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, bulkWriteShortcuts, clearAllStats, deleteShortcuts, getStore, normalizeKey, renameShortcut, restoreShortcuts, sanitizeShortcut, saveSettings, seedStarterShortcuts, upsertShortcut } from './storage';
 import { buildShortcutRow, cancelPendingDelete, groupShortcuts, hasShortcutTargetCollision, hoveredRow, normalizeUrl, openShortcut, pendingDeleteKey, renderOverwriteConfirm, savedStatusMessage, showUndoToast } from './ui';
 import { deriveSearchFallbackUrl, suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
 import { fuzzyFilter } from './fuzzy';
@@ -1022,7 +1022,7 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
         // Single batched write: one storage operation regardless of size, so
         // a large import can't trip chrome.storage.sync's per-minute quota.
         try {
-          await chrome.storage.sync.set(chosenWrites);
+          await bulkWriteShortcuts(chosenWrites);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           dataStatusEl.textContent = msg.toLowerCase().includes('quota')

@@ -89,7 +89,7 @@ export function createChromeMock() {
     };
   }
 
-  const chrome = {
+  const chromeMock = {
     storage: {
       sync: makeStorage(syncStore, 'sync'),
       local: makeStorage(localStore, 'local'),
@@ -126,6 +126,7 @@ export function createChromeMock() {
       update: vi.fn(async (tabId?: number, props?: chrome.tabs.UpdateProperties) => ({ id: tabId ?? 1, ...props })),
       query: vi.fn(async () => []),
       get: vi.fn(async (tabId: number) => ({ id: tabId, url: 'https://example.com' })),
+      onCreated: makeChromeEvent(),
       onRemoved: makeChromeEvent(),
       onActivated: makeChromeEvent(),
       onUpdated: makeChromeEvent(),
@@ -166,8 +167,33 @@ export function createChromeMock() {
       onInputEntered: makeChromeEvent(),
     },
     sidePanel: { open: vi.fn(async () => {}) },
-    windows: { getCurrent: vi.fn(async () => ({ id: 1 })) },
-  } as unknown as typeof globalThis.chrome;
+    windows: {
+      WINDOW_ID_NONE: -1,
+      getCurrent: vi.fn(async () => ({ id: 1 })),
+      onFocusChanged: makeChromeEvent(),
+    },
+  };
 
-  return { syncStore, localStore, sessionStore, dnrRules, chrome };
+  const chrome = chromeMock as unknown as typeof globalThis.chrome;
+
+  // Empties all mock event listener arrays without clearing sync/local/session
+  // storage so tests can simulate MV3 service worker termination + cold restart.
+  function resetListeners(): void {
+    const seen = new Set<unknown>();
+    const visit = (node: unknown): void => {
+      if (!node || typeof node !== 'object' || seen.has(node)) return;
+      seen.add(node);
+      const candidate = node as { listeners?: unknown; emit?: unknown };
+      if (Array.isArray(candidate.listeners) && typeof candidate.emit === 'function') {
+        candidate.listeners.length = 0;
+        return;
+      }
+      for (const value of Object.values(node as Record<string, unknown>)) {
+        visit(value);
+      }
+    };
+    visit(chromeMock);
+  }
+
+  return { syncStore, localStore, sessionStore, dnrRules, chrome, resetListeners };
 }

@@ -11,6 +11,7 @@ let syncStore: Record<string, unknown>;
 let localStore: Record<string, unknown>;
 let sessionStore: Record<string, unknown>;
 let dnrRules: chrome.declarativeNetRequest.Rule[];
+let activeMock: ReturnType<typeof createChromeMock>;
 
 function asMockEvent<T extends (...args: any[]) => any>(event: unknown): MockChromeEvent<T> {
   return event as MockChromeEvent<T>;
@@ -25,11 +26,24 @@ async function flushPromises(ticks = 25): Promise<void> {
 async function loadBackground(userAgent = CHROME_UA) {
   vi.resetModules();
   const mock = createChromeMock();
+  activeMock = mock;
   globalThis.chrome = mock.chrome;
   syncStore = mock.syncStore;
   localStore = mock.localStore;
   sessionStore = mock.sessionStore;
   dnrRules = mock.dnrRules;
+  vi.stubGlobal('navigator', { userAgent });
+
+  const storage = await import('./storage');
+  await import('./background');
+  await flushPromises();
+  return { storage };
+}
+
+async function restartWorker(userAgent = EDGE_UA) {
+  vi.resetModules();
+  activeMock.resetListeners();
+  globalThis.chrome = activeMock.chrome;
   vi.stubGlobal('navigator', { userAgent });
 
   const storage = await import('./storage');
@@ -980,5 +994,210 @@ describe('8. Context Menus & Sidepanel Toggle Command', () => {
         }),
       ]),
     );
+  });
+});
+
+describe('9. Session Mirror & MV3 Service Worker Pre-Warming (Option A)', () => {
+  function fullSyncReads(): unknown[][] {
+    const calls = vi.mocked(chrome.storage.sync.get).mock.calls as unknown[][];
+    return calls.filter((c) => c[0] === null || c[0] === undefined);
+  }
+
+  it('redirects a cold-restarted Edge service worker straight from chrome.storage.session with zero full sync reads (even if sync hangs)', async () => {
+    vi.useFakeTimers();
+    const { storage } = await loadBackground(EDGE_UA);
+    await storage.upsertShortcut({
+      key: 'gh',
+      url: 'https://github.com',
+      type: 'redirect',
+    });
+    await vi.advanceTimersByTimeAsync(100);
+    await flushPromises(40);
+
+    // Simulate MV3 service worker termination after 30s idle (module state wiped, sessionStore preserved)
+    await restartWorker(EDGE_UA);
+    vi.mocked(chrome.storage.sync.get).mockClear();
+    vi.mocked(chrome.tabs.update).mockClear();
+
+    // Even if chrome.storage.sync hangs indefinitely, onBeforeNavigate redirects via storage.session
+    vi.mocked(chrome.storage.sync.get).mockImplementation(() => new Promise(() => {}));
+
+    await asMockEvent(chrome.webNavigation.onBeforeNavigate).emit({
+      tabId: 101,
+      frameId: 0,
+      url: 'https://www.bing.com/search?q=gh',
+    } as chrome.webNavigation.WebNavigationParentedCallbackDetails);
+    await flushPromises(40);
+
+    expect(chrome.tabs.update).toHaveBeenCalledTimes(1);
+    expect(chrome.tabs.update).toHaveBeenCalledWith(101, { url: 'https://github.com' });
+    expect(fullSyncReads()).toHaveLength(0);
+  });
+
+  function fullSessionReads(): unknown[][] {
+    const calls = vi.mocked(chrome.storage.session.get).mock.calls as unknown[][];
+    return calls.filter((c) => c[0] === null || c[0] === undefined);
+  }
+
+  it.each([
+    ['tabs.onCreated', () => asMockEvent(chrome.tabs.onCreated).emit({ id: 5, windowId: 1 } as chrome.tabs.Tab)],
+    ['tabs.onActivated', () => asMockEvent(chrome.tabs.onActivated).emit({ tabId: 5, windowId: 1 })],
+    ['windows.onFocusChanged', () => asMockEvent(chrome.windows.onFocusChanged).emit(1)],
+  ])('pre-warms cachedStore on %s so subsequent Edge onBeforeNavigate reads purely from memory', async (_name, trigger) => {
+    vi.useFakeTimers();
+    await loadBackground(EDGE_UA);
+    syncStore['omnibar_s_gh'] = {
+      key: 'gh',
+      url: 'https://github.com',
+      type: 'redirect',
+    };
+
+    await trigger();
+    await flushPromises(40);
+
+    // Tamper with both underlying storage tiers + clear spies to prove the redirect
+    // is served 100% from Tier 1 (in-memory cachedStore) with zero full-store reads
+    syncStore['omnibar_s_gh'] = {
+      key: 'gh',
+      url: 'https://tampered-sync.example.com',
+      type: 'redirect',
+    };
+    sessionStore['omnibar_s_gh'] = {
+      key: 'gh',
+      url: 'https://tampered-session.example.com',
+      type: 'redirect',
+    };
+    vi.mocked(chrome.storage.sync.get).mockClear();
+    vi.mocked(chrome.storage.session.get).mockClear();
+
+    await asMockEvent(chrome.webNavigation.onBeforeNavigate).emit({
+      tabId: 102,
+      frameId: 0,
+      url: 'https://www.google.com/search?q=gh',
+    } as chrome.webNavigation.WebNavigationParentedCallbackDetails);
+    await flushPromises(40);
+
+    expect(chrome.tabs.update).toHaveBeenCalledWith(102, { url: 'https://github.com' });
+    expect(fullSyncReads()).toHaveLength(0);
+    expect(fullSessionReads()).toHaveLength(0);
+  });
+
+  it('ignores windows.onFocusChanged(WINDOW_ID_NONE) when browser loses focus', async () => {
+    await loadBackground(EDGE_UA);
+    syncStore['omnibar_s_gh'] = {
+      key: 'gh',
+      url: 'https://github.com',
+      type: 'redirect',
+    };
+    vi.mocked(chrome.storage.sync.get).mockClear();
+
+    await asMockEvent(chrome.windows.onFocusChanged).emit(chrome.windows.WINDOW_ID_NONE);
+    await flushPromises(30);
+
+    expect(fullSyncReads()).toHaveLength(0);
+    expect(sessionStore['omnibar_store_meta']).toBeUndefined();
+  });
+
+  it('propagates cross-device deletes arriving via storage.onChanged while cachedStore is cold', async () => {
+    vi.useFakeTimers();
+    const { storage } = await loadBackground(EDGE_UA);
+    await storage.upsertShortcut({
+      key: 'gh',
+      url: 'https://github.com',
+      type: 'redirect',
+    });
+    await vi.advanceTimersByTimeAsync(100);
+    await flushPromises(40);
+
+    // Worker goes cold, leaving omnibar_s_gh in sessionStore
+    await restartWorker(EDGE_UA);
+    expect(sessionStore['omnibar_s_gh']).toBeDefined();
+
+    // Cross-device sync removes gh while cachedStore === null
+    await chrome.storage.sync.remove('omnibar_s_gh');
+    await vi.advanceTimersByTimeAsync(100);
+    await flushPromises(40);
+
+    expect(sessionStore['omnibar_s_gh']).toBeUndefined();
+
+    await asMockEvent(chrome.webNavigation.onBeforeNavigate).emit({
+      tabId: 103,
+      frameId: 0,
+      url: 'https://www.bing.com/search?q=gh',
+    } as chrome.webNavigation.WebNavigationParentedCallbackDetails);
+    await flushPromises(40);
+
+    expect(chrome.tabs.update).not.toHaveBeenCalled();
+  });
+
+  it('drops stale in-flight sync reads when storage.onChanged mutates a shortcut mid-flight', async () => {
+    vi.useFakeTimers();
+    await loadBackground(EDGE_UA);
+    syncStore['omnibar_s_gh'] = {
+      key: 'gh',
+      url: 'https://old.example.com',
+      type: 'redirect',
+    };
+
+    let resolveSlowSync!: (val: Record<string, unknown>) => void;
+    vi.mocked(chrome.storage.sync.get).mockImplementationOnce(
+      () =>
+        new Promise<Record<string, unknown>>((res) => {
+          resolveSlowSync = res;
+        }) as unknown as Promise<Record<string, any>>,
+    );
+
+    // Start pre-warming (hits slow sync.get(null) because sessionStore is empty)
+    const warmPromise = asMockEvent(chrome.tabs.onCreated).emit({ id: 9, windowId: 1 } as chrome.tabs.Tab);
+    await flushPromises(5);
+
+    // While sync.get(null) is still in-flight, an update arrives via storage.sync.set -> onChanged bumps epoch
+    await chrome.storage.sync.set({
+      omnibar_s_gh: {
+        key: 'gh',
+        url: 'https://new.example.com',
+        type: 'redirect',
+      },
+    });
+
+    // Now resolve the stale snapshot from before the update
+    resolveSlowSync({
+      omnibar_s_gh: {
+        key: 'gh',
+        url: 'https://old.example.com',
+        type: 'redirect',
+      },
+    });
+    await warmPromise;
+    await vi.advanceTimersByTimeAsync(100);
+    await flushPromises(40);
+
+    await asMockEvent(chrome.webNavigation.onBeforeNavigate).emit({
+      tabId: 104,
+      frameId: 0,
+      url: 'https://www.bing.com/search?q=gh',
+    } as chrome.webNavigation.WebNavigationParentedCallbackDetails);
+    await flushPromises(40);
+
+    expect(chrome.tabs.update).toHaveBeenCalledWith(104, { url: 'https://new.example.com' });
+  });
+
+  it('never matches Object.prototype keys like "constructor" or "toString"', async () => {
+    await loadBackground(EDGE_UA);
+    await asMockEvent(chrome.tabs.onCreated).emit({ id: 1, windowId: 1 } as chrome.tabs.Tab);
+    await flushPromises(30);
+    vi.mocked(chrome.storage.sync.get).mockClear();
+
+    for (const protoKey of ['constructor', 'toString', 'valueOf']) {
+      await asMockEvent(chrome.webNavigation.onBeforeNavigate).emit({
+        tabId: 105,
+        frameId: 0,
+        url: `https://www.bing.com/search?q=${protoKey}`,
+      } as chrome.webNavigation.WebNavigationParentedCallbackDetails);
+    }
+    await flushPromises(30);
+
+    expect(chrome.tabs.update).not.toHaveBeenCalled();
+    expect(chrome.storage.sync.get).not.toHaveBeenCalled();
   });
 });

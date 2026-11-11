@@ -42,7 +42,7 @@ Type a keyword you've saved → hit Enter → you're there. That's it.
 
 ## How it works
 
-OmniJump intercepts address-bar searches that match a saved keyword using Chrome's [declarativeNetRequest](https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest) (DNR) API. When you type a keyword into the omnibox, Chrome issues a search query to the default search engine — OmniJump's DNR rule matches on the `q=` parameter and redirects before the request ever leaves the browser. In browsers like Microsoft Edge that suppress extension DNR redirects on the default search engine origin, OmniJump also intercepts navigations in `webNavigation.onBeforeNavigate` (backed by an in-memory store cache) with `webNavigation.onCommitted` as a deduplicated safety net.
+OmniJump intercepts address-bar searches that match a saved keyword using Chrome's [declarativeNetRequest](https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest) (DNR) API. When you type a keyword into the omnibox, Chrome issues a search query to the default search engine — OmniJump's DNR rule matches on the `q=` parameter and redirects before the request ever leaves the browser. In browsers like Microsoft Edge that suppress extension DNR redirects on the default search engine origin, OmniJump also intercepts navigations in `webNavigation.onBeforeNavigate` (backed by an in-memory store cache mirrored into `chrome.storage.session` and pre-warmed on tab/window activity) with `webNavigation.onCommitted` as a deduplicated safety net.
 
 For tab bundles, the service worker listens on `webNavigation.onBeforeNavigate` and opens the remaining URLs as background tabs after the first URL is redirected.
 
