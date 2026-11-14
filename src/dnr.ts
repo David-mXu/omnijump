@@ -1,5 +1,10 @@
 import { getStore } from './storage';
 import { Shortcut } from './types';
+import { isQueryOnlyTemplate } from './url';
+
+// Session key the UI reads to mark shortcuts whose DNR rules were rejected by
+// Chrome (too-long regex program or quota). They still work via the JS fallback.
+export const DNR_SKIPPED_KEY = 'omnibar_dnr_skipped';
 
 // Chrome's guaranteed total budget. Every rule OmniJump builds also uses a
 // regexFilter, so the lower (by default 1,000) regex-specific quota applies.
@@ -36,6 +41,8 @@ interface SearchEngine {
   name: string;
   /** Host + path fragment, anchored by the caller with `^https?://`. */
   pattern: string;
+  /** Query parameter(s) that carry the search text. Most engines use `q`. */
+  queryParams: string[];
 }
 
 // The `q=` parameter carries the omnibar query on these engines. Redirect rules
@@ -48,13 +55,15 @@ const SEARCH_ENGINES: SearchEngine[] = [
   // could observe which keywords a visitor owns — so TLDs are restricted to
   // the shapes Google actually uses. The mandatory `/` after the TLD stops
   // deeper suffixes (google.co.uk.evil.com still fails).
-  { name: 'google', pattern: '(?:www\\.)?google\\.(?:com|cat|eus|[a-z]{2})(?:\\.[a-z]{2})?/(?:search|webhp)?' },
-  { name: 'bing', pattern: '(?:(?:www|cn|www2|www4)\\.)?bing\\.com/search/?' },
-  { name: 'duckduckgo', pattern: '(?:(?:www|html|lite)\\.)?duckduckgo\\.com/(?:html/|lite/)?' },
-  { name: 'brave', pattern: 'search\\.brave\\.com/(?:search)?' },
-  { name: 'kagi', pattern: '(?:www\\.)?kagi\\.com/(?:search)?' },
-  { name: 'ecosia', pattern: '(?:www\\.)?ecosia\\.org/(?:search)?' },
-  { name: 'startpage', pattern: '(?:www\\.)?startpage\\.com/(?:sp/search|do/search|search)?' },
+  { name: 'google', pattern: '(?:www\\.)?google\\.(?:com|cat|eus|[a-z]{2})(?:\\.[a-z]{2})?/(?:search|webhp)?', queryParams: ['q'] },
+  { name: 'bing', pattern: '(?:(?:www|cn|www2|www4)\\.)?bing\\.com/search/?', queryParams: ['q'] },
+  { name: 'duckduckgo', pattern: '(?:(?:www|html|lite)\\.)?duckduckgo\\.com/(?:html/|lite/)?', queryParams: ['q'] },
+  { name: 'brave', pattern: 'search\\.brave\\.com/(?:search)?', queryParams: ['q'] },
+  { name: 'kagi', pattern: '(?:www\\.)?kagi\\.com/(?:search)?', queryParams: ['q'] },
+  { name: 'ecosia', pattern: '(?:www\\.)?ecosia\\.org/(?:search)?', queryParams: ['q'] },
+  // Startpage's documented manual search string uses `query=`, while the
+  // built-in browser engines use `q=`. The official extension uses do/dsearch.
+  { name: 'startpage', pattern: '(?:www\\.)?startpage\\.com/(?:sp/search|do/search|do/dsearch|search)?', queryParams: ['q', 'query'] },
 ];
 
 // Uncompiled JavaScript regex, only used to gate the service worker's listeners
@@ -70,15 +79,21 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function queryParamPattern(engine: SearchEngine): string {
+  return engine.queryParams.length === 1
+    ? escapeRegex(engine.queryParams[0]!)
+    : `(?:${engine.queryParams.map(escapeRegex).join('|')})`;
+}
+
 // `?q=key`, `&q=key` ... and rejects a partial word match (`q=ghub`).
 function buildQueryRegex(engine: SearchEngine, key: string): string {
-  return `^https?://${engine.pattern}(?:\\?[^#]*&|\\?)q=${escapeRegex(key)}(?:\\+|%20)*(?:[&#]|$)`;
+  return `^https?://${engine.pattern}(?:\\?[^#]*&|\\?)${queryParamPattern(engine)}=${escapeRegex(key)}(?:\\+|%20)*(?:[&#]|$)`;
 }
 
 // Same, but captures everything after `key ` so it can be substituted into the
 // shortcut's URL template.
 function buildParamQueryRegex(engine: SearchEngine, key: string): string {
-  return `^https?://${engine.pattern}(?:\\?[^#]*&|\\?)q=${escapeRegex(key)}(?:\\+|%20)+([^&#]+?)(?:[&#].*)?$`;
+  return `^https?://${engine.pattern}(?:\\?[^#]*&|\\?)${queryParamPattern(engine)}=${escapeRegex(key)}(?:\\+|%20)+([^&#]+?)(?:[&#].*)?$`;
 }
 
 function resolveShortcutUrl(shortcut: Shortcut): string | null {
@@ -88,12 +103,18 @@ function resolveShortcutUrl(shortcut: Shortcut): string | null {
   return shortcut.url;
 }
 
+const PLACEHOLDER_SENTINEL = '__omnijump_param__';
+
 function isSafeRedirectUrl(url: string | undefined | null, allowPlaceholder = false): boolean {
   if (!url) return false;
   const lower = url.toLowerCase();
   if (!lower.startsWith('http:') && !lower.startsWith('https:')) return false;
   try {
-    const parsed = new URL(allowPlaceholder ? url.replace(/%s/g, 'param') : url);
+    const parsed = new URL(allowPlaceholder ? url.replace(/%s/g, PLACEHOLDER_SENTINEL) : url);
+    // When a placeholder is allowed it must stay in the path/query. A
+    // capture group in the authority could rewrite the redirect host.
+    const authority = `${parsed.username}${parsed.password}${parsed.hostname}`;
+    if (allowPlaceholder && authority.includes(PLACEHOLDER_SENTINEL)) return false;
     return (
       (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
       parsed.hostname.length > 0 &&
@@ -108,13 +129,28 @@ interface BuiltRules {
   rules: chrome.declarativeNetRequest.Rule[];
   /** Keys left without rules, either malformed or over the rule budget. */
   skippedKeys: string[];
+  /** Rule id -> keyword, used to name rules Chrome rejects at apply time. */
+  keyByRuleId: Map<number, string>;
 }
 
 function buildRules(shortcuts: Shortcut[]): BuiltRules {
   const rules: chrome.declarativeNetRequest.Rule[] = [];
   const skippedKeys: string[] = [];
+  const keyByRuleId = new Map<number, string>();
   const maxRegexRules = maxAvailableRegexRules();
   let id = 1;
+
+  // The regex quota is positional, so spend it on the shortcuts the user
+  // actually reaches for first instead of on storage iteration order.
+  const ordered = shortcuts
+    .map((shortcut, index) => ({ shortcut, index }))
+    .sort(
+      (a, b) =>
+        (b.shortcut.useCount ?? 0) - (a.shortcut.useCount ?? 0) ||
+        (b.shortcut.lastUsed ?? 0) - (a.shortcut.lastUsed ?? 0) ||
+        a.index - b.index,
+    )
+    .map(({ shortcut }) => shortcut);
 
   const resourceTypes = ['main_frame'] as chrome.declarativeNetRequest.ResourceType[];
   const redirectAction = (url: string) => ({
@@ -122,7 +158,7 @@ function buildRules(shortcuts: Shortcut[]): BuiltRules {
     redirect: { url },
   });
 
-  for (const shortcut of shortcuts) {
+  for (const shortcut of ordered) {
     // Skip (don't throw): one malformed record must not block every other rule.
     const url = resolveShortcutUrl(shortcut);
     if (!url || !isSafeRedirectUrl(url)) {
@@ -131,7 +167,12 @@ function buildRules(shortcuts: Shortcut[]): BuiltRules {
       continue;
     }
 
-    const parameterized = shortcut.type === 'parameterized' && isSafeRedirectUrl(shortcut.urlTemplate, true);
+    const parameterized = shortcut.type === 'parameterized' &&
+      isSafeRedirectUrl(shortcut.urlTemplate, true) &&
+      // Path/fragment templates cannot use a DNR capture group: the engine's
+      // raw `+`-encoded query would be substituted literally. The JS fallback
+      // percent-encodes correctly, so leave those to it.
+      isQueryOnlyTemplate(shortcut.urlTemplate ?? '');
     const rulesPerShortcut = SEARCH_ENGINES.length * (parameterized ? 2 : 1);
 
     if (rules.length + rulesPerShortcut > maxRegexRules) {
@@ -154,8 +195,10 @@ function buildRules(shortcuts: Shortcut[]): BuiltRules {
 
     // Exact-match rules (no argument, or all non-parameterized types)
     SEARCH_ENGINES.forEach((engine, index) => {
+      const ruleId = id++;
+      keyByRuleId.set(ruleId, shortcut.key);
       rules.push({
-        id: id++,
+        id: ruleId,
         priority: 1,
         action: redirectAction(url),
         condition: { regexFilter: exactRegexes[index], isUrlFilterCaseSensitive: false, resourceTypes },
@@ -166,8 +209,10 @@ function buildRules(shortcuts: Shortcut[]): BuiltRules {
     if (parameterized && shortcut.urlTemplate) {
       const substitution = shortcut.urlTemplate.replace(/\\/g, '\\\\').replace(/%s/g, '\\1');
       SEARCH_ENGINES.forEach((_engine, index) => {
+        const ruleId = id++;
+        keyByRuleId.set(ruleId, shortcut.key);
         rules.push({
-          id: id++,
+          id: ruleId,
           priority: 2,
           action: {
             type: 'redirect' as chrome.declarativeNetRequest.RuleActionType,
@@ -183,15 +228,19 @@ function buildRules(shortcuts: Shortcut[]): BuiltRules {
     }
   }
 
-  return { rules, skippedKeys };
+  return { rules, skippedKeys, keyByRuleId };
 }
 
 // updateDynamicRules is atomic: one rejected rule (e.g. an over-long regex) fails
 // the whole call and leaves zero redirects. Fall back to adding rules one by one
 // so only the offending rules are lost.
-async function applyRules(removeRuleIds: number[], rules: chrome.declarativeNetRequest.Rule[]): Promise<void> {
+async function applyRules(
+  removeRuleIds: number[],
+  rules: chrome.declarativeNetRequest.Rule[],
+): Promise<number[]> {
   try {
     await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules: rules });
+    return [];
   } catch (error) {
     console.warn('OmniJump: bulk DNR update was rejected; retrying rule by rule.', error);
 
@@ -205,13 +254,7 @@ async function applyRules(removeRuleIds: number[], rules: chrome.declarativeNetR
         dropped.push(rule.id);
       }
     }
-
-    if (dropped.length > 0) {
-      console.error(
-        `OmniJump: Chrome rejected ${dropped.length} DNR rule(s); those keywords will not redirect.`,
-        dropped,
-      );
-    }
+    return dropped;
   }
 }
 
@@ -219,17 +262,28 @@ async function runRebuildDynamicRules(): Promise<void> {
   const store = await getStore();
   const shortcuts = Object.values(store.shortcuts);
 
-  const { rules, skippedKeys } = buildRules(shortcuts);
-  if (skippedKeys.length > 0) {
-    console.warn(
-      `OmniJump: ${skippedKeys.length} shortcut(s) have no redirect rule: ${skippedKeys.join(', ')}`,
-    );
-  }
+  const { rules, skippedKeys, keyByRuleId } = buildRules(shortcuts);
 
   const existing = await chrome.declarativeNetRequest.getDynamicRules();
   const removeRuleIds = existing.map((rule) => rule.id);
 
-  await applyRules(removeRuleIds, rules);
+  const droppedRuleIds = await applyRules(removeRuleIds, rules);
+  for (const ruleId of droppedRuleIds) {
+    const key = keyByRuleId.get(ruleId);
+    if (key && !skippedKeys.includes(key)) skippedKeys.push(key);
+  }
+
+  if (skippedKeys.length > 0) {
+    console.warn(
+      `OmniJump: ${skippedKeys.length} shortcut(s) have no instant redirect rule ` +
+      `(they still redirect after the search page loads): ${skippedKeys.join(', ')}`,
+    );
+  }
+  try {
+    await chrome.storage.session.set({ [DNR_SKIPPED_KEY]: skippedKeys });
+  } catch {
+    // Session storage is best-effort; the console warning above remains.
+  }
 }
 
 let activeRebuild: Promise<void> | null = null;

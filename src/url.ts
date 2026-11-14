@@ -20,10 +20,14 @@ export function normalizeUrl(input: string): string {
     const parsed = new URL(testUrl);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
     const host = parsed.hostname;
+    // %s is only meaningful in the query or path; anywhere in the authority
+    // (host or userinfo) it would let a DNR capture group rewrite the host.
     if (
       !host ||
       /\s/.test(host) ||
       host.includes('__omnijump_param__') ||
+      parsed.username.includes('__omnijump_param__') ||
+      parsed.password.includes('__omnijump_param__') ||
       host.startsWith('.') ||
       host.endsWith('.')
     ) {
@@ -35,6 +39,30 @@ export function normalizeUrl(input: string): string {
     return candidate;
   } catch {
     return '';
+  }
+}
+
+// The DNR capture rule substitutes the engine's raw query text (which uses
+// `+` for spaces) into every %s. That is correct in a query component but
+// wrong in a path or fragment, where `+` is literal. DNR argument redirects are
+// therefore only emitted for templates whose placeholders are all in the query;
+// path templates fall back to the JS redirect, which uses encodeURIComponent.
+export function isQueryOnlyTemplate(template: string): boolean {
+  if (typeof template !== 'string' || !template.includes('%s')) return false;
+  try {
+    const parsed = new URL(template.replace(/%s/g, '__omnijump_param__'));
+    if (
+      parsed.pathname.includes('__omnijump_param__') ||
+      parsed.hash.includes('__omnijump_param__') ||
+      parsed.hostname.includes('__omnijump_param__') ||
+      parsed.username.includes('__omnijump_param__') ||
+      parsed.password.includes('__omnijump_param__')
+    ) {
+      return false;
+    }
+    return parsed.search.includes('__omnijump_param__');
+  } catch {
+    return false;
   }
 }
 

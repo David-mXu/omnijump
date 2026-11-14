@@ -208,13 +208,13 @@ describe('rebuildDynamicRules', () => {
         key: 'multi',
         url: 'https://example.com',
         type: 'parameterized',
-        urlTemplate: 'https://example.com/%s?q=%s&p=a\\b',
+        urlTemplate: 'https://example.com/?q=%s&r=%s&p=a\\b',
       };
       await rebuildDynamicRules();
       const param = dnrRules.find(
         r => r.priority === 2 && r.condition.regexFilter?.includes('q=multi'),
       );
-      expect(param?.action.redirect?.regexSubstitution).toBe('https://example.com/\\1?q=\\1&p=a\\\\b');
+      expect(param?.action.redirect?.regexSubstitution).toBe('https://example.com/?q=\\1&r=\\1&p=a\\\\b');
     });
   });
 });
@@ -466,7 +466,7 @@ describe('rejected rule recovery', () => {
 
     dnr.updateDynamicRules = vi.fn(async (options: { removeRuleIds?: number[]; addRules?: chrome.declarativeNetRequest.Rule[] }) => {
       const adds = options.addRules ?? [];
-      if (adds.length > 1 || adds.some((r) => r.condition.regexFilter?.includes('q=bad'))) {
+      if (adds.length > 1 || adds.some((r) => (r.condition.regexFilter ?? '').includes('=bad('))) {
         throw new Error('Rule skipped');
       }
       return original(options);
@@ -485,5 +485,68 @@ describe('rejected rule recovery', () => {
 
     expect(dnrRules).toHaveLength(ENGINE_COUNT);
     expect(dnrRules.every((r) => r.action.redirect?.url === 'https://ok.com')).toBe(true);
+  });
+});
+
+describe('audit regressions: Startpage parameters, path templates, and quota priority', () => {
+  it('intercepts Startpage ?query= and the do/dsearch path shape', async () => {
+    syncStore[`${SHORTCUT_PREFIX}gh`] = { key: 'gh', url: 'https://github.com', type: 'redirect' };
+    await rebuildDynamicRules();
+
+    const startpage = dnrRules.find(
+      r => r.priority === 1 && r.condition.regexFilter?.includes('startpage\\.com'),
+    );
+    expect(startpage).toBeTruthy();
+    const re = regexOf(startpage);
+    expect(re.test('https://www.startpage.com/sp/search?q=gh')).toBe(true);
+    expect(re.test('https://www.startpage.com/sp/search?query=gh')).toBe(true);
+    expect(re.test('https://www.startpage.com/do/dsearch?q=gh&cat=web&language=english')).toBe(true);
+    expect(re.test('https://www.startpage.com/sp/search?query=github')).toBe(false);
+  });
+
+  it('emits capture rules for a Startpage query= template', async () => {
+    syncStore[`${SHORTCUT_PREFIX}sp`] = {
+      key: 'sp',
+      url: 'https://www.startpage.com',
+      urlTemplate: 'https://www.startpage.com/sp/search?query=%s',
+      type: 'parameterized',
+    };
+    await rebuildDynamicRules();
+
+    const capture = dnrRules.find(
+      r => r.priority === 2 && r.condition.regexFilter?.includes('startpage\\.com'),
+    );
+    expect(capture).toBeTruthy();
+    expect(regexOf(capture).test('https://www.startpage.com/sp/search?query=sp+cats')).toBe(true);
+    expect(capture?.action.redirect?.regexSubstitution).toBe('https://www.startpage.com/sp/search?query=\\1');
+  });
+
+  it('does not emit a DNR capture rule for %s in a path segment', async () => {
+    syncStore[`${SHORTCUT_PREFIX}wiki-path`] = {
+      key: 'wikipath',
+      url: 'https://en.wikipedia.org',
+      urlTemplate: 'https://en.wikipedia.org/wiki/%s',
+      type: 'parameterized',
+    };
+    await rebuildDynamicRules();
+
+    expect(dnrRules.filter(r => r.priority === 1 && r.condition.regexFilter?.includes('=wikipath'))).toHaveLength(ENGINE_COUNT);
+    expect(dnrRules.some(r => r.priority === 2 && r.condition.regexFilter?.includes('=wikipath'))).toBe(false);
+  });
+
+  it('spends the regex quota on the most-used shortcuts rather than storage order', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (let i = 0; i < 143; i++) {
+      syncStore[`${SHORTCUT_PREFIX}k${i}`] = {
+        key: `k${i}`,
+        url: `https://example.com/${i}`,
+        type: 'redirect',
+        useCount: i === 142 ? 5 : 0,
+      };
+    }
+    await rebuildDynamicRules();
+    expect(dnrRules.some(r => r.condition.regexFilter?.includes('q=k142'))).toBe(true);
+    expect(dnrRules.some(r => r.condition.regexFilter?.includes('q=k141'))).toBe(false);
+    vi.restoreAllMocks();
   });
 });

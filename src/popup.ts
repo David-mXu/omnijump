@@ -2,7 +2,7 @@ import './theme.css';
 import { IS_FIREFOX, openSidePanel } from './platform';
 import { SETTINGS_KEY, addDismissedHost, getStore, normalizeKey, upsertShortcut } from './storage';
 import { suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
-import { MAX_KEY_LENGTH, Shortcut, Suggestion } from './types';
+import { MAX_KEY_LENGTH, MAX_URL_LENGTH, Shortcut, Suggestion } from './types';
 import { hasShortcutTargetCollision, normalizeUrl, renderOverwriteConfirm, savedStatusMessage } from './ui';
 
 try {
@@ -89,7 +89,7 @@ function showSuggestion(s: Suggestion, tabId: number): void {
     }
   }
 
-  document.getElementById('saveSuggestion')?.addEventListener('click', async () => {
+  const persistSuggestion = async (key: string): Promise<void> => {
     try {
       const store = await getStore();
       // Validate at the write boundary like every other save path.
@@ -98,14 +98,41 @@ function showSuggestion(s: Suggestion, tabId: number): void {
         setStatus('Suggested URL is invalid.', 'error');
         return;
       }
-      await upsertShortcut({ key: s.key, url, type: 'redirect' });
+      await upsertShortcut({ key, url, type: 'redirect' });
       await chrome.storage.session.remove(`suggestion_${tabId}`);
       await chrome.action.setBadgeText({ tabId, text: '' });
       el.hidden = true;
-      setStatus(savedStatusMessage(s.key, Object.keys(store.shortcuts).length + 1), 'success');
+      setStatus(savedStatusMessage(key, Object.keys(store.shortcuts).length + 1), 'success');
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Failed to save shortcut.', 'error');
     }
+  };
+
+  document.getElementById('saveSuggestion')?.addEventListener('click', async () => {
+    const url = normalizeUrl(s.url);
+    if (!url) {
+      setStatus('Suggested URL is invalid.', 'error');
+      return;
+    }
+    // Mirror the form's overwrite guard: a banner that stays visible after the
+    // keyword was saved elsewhere must not silently replace it.
+    const store = await getStore();
+    const existing = Object.prototype.hasOwnProperty.call(store.shortcuts, s.key)
+      ? store.shortcuts[s.key]
+      : undefined;
+    const candidate: Shortcut = { key: s.key, url, type: 'redirect' };
+    if (existing && hasShortcutTargetCollision(existing, candidate) && statusEl) {
+      const alt = uniqueKey(s.key, new Set(Object.keys(store.shortcuts)));
+      renderOverwriteConfirm(
+        statusEl,
+        existing,
+        alt,
+        () => void persistSuggestion(s.key),
+        (altKey) => void persistSuggestion(altKey),
+      );
+      return;
+    }
+    await persistSuggestion(s.key);
   });
 
   document.getElementById('dismissSuggestion')?.addEventListener('click', async () => {
@@ -175,10 +202,16 @@ form?.addEventListener('submit', async (event) => {
     setStatus(`Keyword is too long (${key.length} chars, max ${MAX_KEY_LENGTH}).`, 'error');
     return;
   }
+  if (urlInput.value.trim().length > MAX_URL_LENGTH) {
+    setStatus(`URL is too long (max ${MAX_URL_LENGTH} characters).`, 'error');
+    return;
+  }
 
   try {
     const store = await getStore();
-    const existing = store.shortcuts[key];
+    const existing = Object.prototype.hasOwnProperty.call(store.shortcuts, key)
+      ? store.shortcuts[key]
+      : undefined;
     const total = Object.keys(store.shortcuts).length;
     const candidate: Shortcut = { key, url, type: 'redirect' };
 

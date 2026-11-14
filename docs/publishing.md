@@ -97,7 +97,12 @@ Setup status (2026-11-05): **complete.** The listing's owner account is
 davidmingxu@gmail.com; `FIREFOX_API_KEY` (JWT issuer `user:19957299`) and
 `FIREFOX_API_SECRET` are set as repository secrets, and version 1.2.4 was
 submitted manually through the Dev Hub (with source archive — reviewers
-require it for minified builds). From then on, `git tag firefox/vX.Y.Z && git push --tags` publishes.
+require it for minified builds). The automated workflow now reproduces that
+step: it zips the rebuild inputs listed in `BUILD.md` and passes
+`--upload-source-code=firefox-source.zip` to `web-ext sign`. It also passes
+`--approval-timeout=0`, so the job submits and returns instead of failing after
+the default 15-minute review wait. From then on,
+`git tag firefox/vX.Y.Z && git push --tags` publishes.
 
 ## Edge Add-ons (automated via `publish-edge.yml`)
 

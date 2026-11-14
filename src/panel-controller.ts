@@ -1,11 +1,12 @@
 import './theme.css';
+import { DNR_SKIPPED_KEY } from './dnr';
 import { icon } from './icons';
 import { IS_FIREFOX } from './platform';
 import { DAILY_KEY, SETTINGS_KEY, SHORTCUT_PREFIX, addDismissedHost, bulkWriteShortcuts, clearAllStats, deleteShortcuts, getStore, normalizeKey, renameShortcut, restoreShortcuts, sanitizeShortcut, saveSettings, seedStarterShortcuts, upsertShortcut } from './storage';
-import { buildShortcutRow, cancelPendingDelete, groupShortcuts, hasShortcutTargetCollision, hoveredRow, normalizeUrl, openShortcut, pendingDeleteKey, renderOverwriteConfirm, savedStatusMessage, showUndoToast } from './ui';
+import { buildShortcutRow, cancelPendingDelete, describeTarget, groupShortcuts, hasShortcutTargetCollision, hoveredRow, isRowEditing, normalizeUrl, openShortcut, pendingDeleteKey, renderOverwriteConfirm, savedStatusMessage, showToast, showUndoToast } from './ui';
 import { deriveSearchFallbackUrl, suggestKeyFromUrl, uniqueKey, getUrlAncestors } from './suggest';
 import { fuzzyFilter } from './fuzzy';
-import { MAX_IMPORT_FILE_BYTES, MAX_KEY_LENGTH, Shortcut, Suggestion, UserSettings } from './types';
+import { MAX_BUNDLE_URLS, MAX_IMPORT_FILE_BYTES, MAX_KEY_LENGTH, MAX_LABEL_LENGTH, MAX_PARAMETERIZED_KEY_LENGTH, MAX_URL_LENGTH, Shortcut, Suggestion, UserSettings } from './types';
 
 export interface PanelControllerOptions {
   enableBackgroundPort?: boolean;
@@ -132,6 +133,11 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
     tabShortcutsBtn.setAttribute('aria-selected', String(name === 'shortcuts'));
     tabBundleBtn.setAttribute('aria-selected', String(name === 'bundle'));
     tabSettingsBtn.setAttribute('aria-selected', String(name === 'settings'));
+    // Roving tabindex: only the active tab is in the Tab order; arrow keys
+    // move between tabs per the ARIA tabs pattern.
+    tabShortcutsBtn.tabIndex = name === 'shortcuts' ? 0 : -1;
+    tabBundleBtn.tabIndex = name === 'bundle' ? 0 : -1;
+    tabSettingsBtn.tabIndex = name === 'settings' ? 0 : -1;
   }
 
   tabShortcutsBtn.addEventListener('click', () => showTab('shortcuts'));
@@ -143,6 +149,12 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
   // This means filter-input keystrokes never hit storage.
   let shortcutCache: Shortcut[] = [];
   let settingsCache: UserSettings = { maxShortcuts: 500, filterThreshold: 10, darkMode: false, staleAutoDelete: true, staleDays: 90, smartSuggestions: false };
+  // Selection survives list re-renders (filtering, live sync); DOM checkboxes
+  // do not, so the source of truth lives here.
+  const selectedKeys = new Set<string>();
+  // Keywords whose DNR rules Chrome rejected (rule budget / RE2 size). They
+  // still redirect through the post-commit fallback.
+  let skippedDnrKeys = new Set<string>();
 
   // Track what was auto-filled so we can detect user edits on tab switch
   let autofillKey = '';
@@ -188,6 +200,9 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
     const filtered = query ? fuzzyFilter(query, shortcutCache) : shortcutCache;
 
     countEl.textContent = `${shortcutCache.length} / ${settingsCache.maxShortcuts}`;
+    countEl.title = skippedDnrKeys.size > 0
+      ? `${skippedDnrKeys.size} shortcut${skippedDnrKeys.size === 1 ? '' : 's'} will redirect after the search page loads (no instant rule).`
+      : '';
 
     const isEmpty = shortcutCache.length === 0;
     const noResults = !isEmpty && filtered.length === 0;
@@ -201,20 +216,87 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
       frag.appendChild(buildShortcutRow(shortcut, refresh, handleAlias, isAlias, handleEditBundle))
     );
     listEl.replaceChildren(frag);
+    // Re-apply selection to the new checkbox nodes and recompute the bulk
+    // button, so it can never claim "Delete (2)" while zero rows are checked.
+    listEl.querySelectorAll<HTMLInputElement>('.select-cb').forEach((cb) => {
+      cb.checked = selectedKeys.has(cb.dataset.key ?? '');
+    });
+    updateDeleteSelectedButton();
+  }
+
+  function updateDeleteSelectedButton(): void {
+    const count = selectedKeys.size;
+    deleteSelectedBtn.hidden = count === 0;
+    deleteSelectedBtn.textContent = `Delete (${count})`;
+  }
+
+  // A live-sync refresh must not overwrite a field the user is editing (or has
+  // typed into but not saved). Each control is marked dirty on input/change and
+  // cleared by its own save handler or when the Settings tab is opened.
+  const dirtySettingsFields = new Set<HTMLElement>();
+  for (const el of [maxShortcutsInput, filterThresholdInput, staleDaysInput, staleToggle, darkModeToggle, smartSuggestionsToggle]) {
+    el.addEventListener('input', () => dirtySettingsFields.add(el));
+    el.addEventListener('change', () => dirtySettingsFields.add(el));
   }
 
   function renderSettings(): void {
-    darkModeToggle.checked = settingsCache.darkMode ?? false;
-    smartSuggestionsToggle.checked = settingsCache.smartSuggestions ?? false;
-    staleToggle.checked = settingsCache.staleAutoDelete;
-    staleDaysInput.value = String(settingsCache.staleDays);
-    maxShortcutsInput.value = String(settingsCache.maxShortcuts);
-    filterThresholdInput.value = String(settingsCache.filterThreshold);
+    if (!dirtySettingsFields.has(darkModeToggle)) darkModeToggle.checked = settingsCache.darkMode ?? false;
+    if (!dirtySettingsFields.has(smartSuggestionsToggle)) smartSuggestionsToggle.checked = settingsCache.smartSuggestions ?? false;
+    if (!dirtySettingsFields.has(staleToggle)) staleToggle.checked = settingsCache.staleAutoDelete;
+    if (!dirtySettingsFields.has(staleDaysInput)) staleDaysInput.value = String(settingsCache.staleDays);
+    if (!dirtySettingsFields.has(maxShortcutsInput)) maxShortcutsInput.value = String(settingsCache.maxShortcuts);
+    if (!dirtySettingsFields.has(filterThresholdInput)) filterThresholdInput.value = String(settingsCache.filterThreshold);
+  }
+
+  // Keeps the list in sync for useCount/lastUsed-only writes (every shortcut
+  // activation touches the record) without rebuilding hundreds of rows.
+  function applyStatOnlyChanges(changes: Record<string, chrome.storage.StorageChange>): void {
+    for (const [storageKey, change] of Object.entries(changes)) {
+      if (!storageKey.startsWith(SHORTCUT_PREFIX)) continue;
+      const next = change.newValue as Shortcut | undefined;
+      if (!next) continue;
+      const cached = shortcutCache.find((s) => s.key === next.key);
+      if (cached) {
+        cached.useCount = next.useCount;
+        cached.lastUsed = next.lastUsed;
+      }
+      const row = listEl.querySelector<HTMLLIElement>(`li[data-key="${next.key}"]`);
+      const stats = row?.querySelector<HTMLElement>('.stats');
+      if (stats) {
+        const parts: string[] = [];
+        if (next.useCount) parts.push(`${next.useCount}×`);
+        if (next.lastUsed) {
+          const days = Math.floor((Date.now() - next.lastUsed) / 86_400_000);
+          parts.push(days === 0 ? 'today' : `${days}d ago`);
+        }
+        stats.textContent = parts.join(' · ');
+      }
+    }
+  }
+
+  function isStatOnlyChange(changes: Record<string, chrome.storage.StorageChange>): boolean {
+    const entries = Object.entries(changes).filter(([k]) => k.startsWith(SHORTCUT_PREFIX));
+    if (entries.length === 0) return false;
+    return entries.every(([, change]) => {
+      const before = change.oldValue as Shortcut | undefined;
+      const after = change.newValue as Shortcut | undefined;
+      if (!before || !after) return false;
+      const strip = (s: Shortcut) => {
+        const { useCount: _useCount, lastUsed: _lastUsed, ...rest } = s;
+        return JSON.stringify(rest);
+      };
+      return strip(before) === strip(after);
+    });
   }
 
   async function refresh(): Promise<void> {
-    cancelPendingDelete();
     const store = await getStore();
+    try {
+      const skipped = await chrome.storage.session.get(DNR_SKIPPED_KEY);
+      skippedDnrKeys = new Set((skipped[DNR_SKIPPED_KEY] as string[] | undefined) ?? []);
+    } catch {
+      skippedDnrKeys = new Set();
+    }
     // Most-used first, so the shortcuts people actually reach for stay on top.
     shortcutCache = Object.values(store.shortcuts).sort(
       (a, b) =>
@@ -224,7 +306,15 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
     );
     settingsCache = { ...store.settings };
     applyDarkMode(settingsCache.darkMode ?? false);
-    renderList();
+    // A pending delete is only invalidated when the record is actually gone.
+    // A live-sync refresh (e.g. a usage touch) must not cancel it.
+    if (pendingDeleteKey && !shortcutCache.some((s) => s.key === pendingDeleteKey)) {
+      cancelPendingDelete();
+    }
+    // Replacing the list while an inline editor is open would detach the
+    // focused inputs and discard typed values. Defer the render until the
+    // editor closes (its save/cancel path calls refresh()).
+    if (!isRowEditing()) renderList();
     renderSettings();
   }
 
@@ -235,7 +325,25 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
     refreshTimer = setTimeout(() => { refreshTimer = null; void refresh(); }, 50);
   }
 
-  filterInput.addEventListener('input', renderList);
+  // Coalesce keystrokes: a 500-row rebuild per character was 100-330 ms.
+  let filterRenderTimer: ReturnType<typeof setTimeout> | null = null;
+  filterInput.addEventListener('input', () => {
+    // Small lists re-render instantly; the debounce only matters at the
+    // hundreds-of-rows scale where each rebuild costs 100+ ms.
+    if (shortcutCache.length < settingsCache.filterThreshold) {
+      if (filterRenderTimer !== null) {
+        clearTimeout(filterRenderTimer);
+        filterRenderTimer = null;
+      }
+      renderList();
+      return;
+    }
+    if (filterRenderTimer !== null) clearTimeout(filterRenderTimer);
+    filterRenderTimer = setTimeout(() => {
+      filterRenderTimer = null;
+      renderList();
+    }, 80);
+  });
 
   // ── Multi-select ──────────────────────────────────────────────────────────────
   selectToggleBtn.addEventListener('click', () => {
@@ -243,29 +351,40 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
     const entering = !listEl.classList.contains('selecting');
     listEl.classList.toggle('selecting', entering);
     selectToggleBtn.textContent = entering ? 'Cancel' : 'Select';
+    selectedKeys.clear();
     deleteSelectedBtn.hidden = true;
     listEl.querySelectorAll<HTMLInputElement>('.select-cb').forEach(cb => { cb.checked = false; });
   });
 
-  listEl.addEventListener('change', () => {
-    const count = listEl.querySelectorAll<HTMLInputElement>('.select-cb:checked').length;
-    deleteSelectedBtn.hidden = count === 0;
-    deleteSelectedBtn.textContent = `Delete (${count})`;
+  listEl.addEventListener('change', (event) => {
+    const cb = event.target;
+    if (cb instanceof HTMLInputElement && cb.classList.contains('select-cb')) {
+      const key = cb.dataset.key ?? '';
+      if (cb.checked) selectedKeys.add(key);
+      else selectedKeys.delete(key);
+    }
+    updateDeleteSelectedButton();
   });
 
   deleteSelectedBtn.addEventListener('click', async () => {
-    const keys = Array.from(
-      listEl.querySelectorAll<HTMLInputElement>('.select-cb:checked')
-    ).map(cb => cb.dataset.key!);
+    const keys = Array.from(selectedKeys);
+    if (keys.length === 0) {
+      deleteSelectedBtn.hidden = true;
+      return;
+    }
     const deleted = shortcutCache.filter(s => keys.includes(s.key));
     await deleteShortcuts(keys);
+    selectedKeys.clear();
     listEl.classList.remove('selecting');
     selectToggleBtn.textContent = 'Select';
     deleteSelectedBtn.hidden = true;
     await refresh();
     showUndoToast(`Deleted ${deleted.length} shortcut${deleted.length === 1 ? '' : 's'}`, async () => {
-      await restoreShortcuts(deleted);
+      const result = await restoreShortcuts(deleted);
       await refresh();
+      if (result.skipped.length > 0) {
+        showToast(`Restored ${result.restored}; skipped ${result.skipped.length} — keyword already in use.`);
+      }
     });
   });
 
@@ -349,8 +468,9 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
     const key = normalizeKey(redirectKeyInput.value);
 
     if (!key) { setRedirectStatus('Enter a keyword.', 'error'); return; }
-    if (key.length > MAX_KEY_LENGTH) {
-      setRedirectStatus(`Keyword is too long (max ${MAX_KEY_LENGTH} characters).`, 'error');
+    const maxKeyLength = isSearchType ? MAX_PARAMETERIZED_KEY_LENGTH : MAX_KEY_LENGTH;
+    if (key.length > maxKeyLength) {
+      setRedirectStatus(`Keyword is too long (max ${maxKeyLength} characters for this shortcut type).`, 'error');
       return;
     }
 
@@ -361,12 +481,20 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
         setRedirectStatus('Search URL must include %s.', 'error');
         return;
       }
+      if (rawTemplate.length > MAX_URL_LENGTH) {
+        setRedirectStatus(`Search URL is too long (max ${MAX_URL_LENGTH} characters).`, 'error');
+        return;
+      }
       const urlTemplate = normalizeUrl(rawTemplate);
       if (!urlTemplate) {
         setRedirectStatus('Enter a valid http(s) search URL template.', 'error');
         return;
       }
       const rawFallback = redirectUrlInput.value.trim();
+      if (rawFallback.length > MAX_URL_LENGTH) {
+        setRedirectStatus(`Fallback URL is too long (max ${MAX_URL_LENGTH} characters).`, 'error');
+        return;
+      }
       let normalizedFallback: string | undefined;
       if (rawFallback) {
         const nf = normalizeUrl(rawFallback);
@@ -383,6 +511,10 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
       }
       candidate = { key, url: fallbackUrl, urlTemplate, type: 'parameterized' };
     } else {
+      if (redirectUrlInput.value.trim().length > MAX_URL_LENGTH) {
+        setRedirectStatus(`URL is too long (max ${MAX_URL_LENGTH} characters).`, 'error');
+        return;
+      }
       const url = normalizeUrl(redirectUrlInput.value);
       if (!url) {
         setRedirectStatus('Enter a valid http(s) URL.', 'error');
@@ -436,7 +568,7 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
 
     const handle = document.createElement('span');
     handle.className = 'drag-handle';
-    handle.title = 'Drag to reorder';
+    handle.title = 'Drag to reorder, or press Alt+ArrowUp/Down in a URL field';
     handle.setAttribute('aria-hidden', 'true');
     handle.innerHTML = icon('drag', 14);
     handle.addEventListener('mousedown', () => { row.draggable = true; });
@@ -447,7 +579,19 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
     input.className = 'url-input';
     input.placeholder = 'google.com or https://...';
     input.setAttribute('aria-label', 'Bundle URL');
+    input.title = 'Alt+ArrowUp/Down to reorder';
     input.value = value;
+    // Keyboard alternative to pointer-only drag-and-drop.
+    input.addEventListener('keydown', (e) => {
+      if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+      const sibling = e.key === 'ArrowUp' ? row.previousElementSibling : row.nextElementSibling;
+      if (!sibling) return;
+      e.preventDefault();
+      if (e.key === 'ArrowUp') urlListEl.insertBefore(row, sibling);
+      else urlListEl.insertBefore(sibling, row);
+      input.focus();
+      setBundleStatus(`Moved URL ${e.key === 'ArrowUp' ? 'up' : 'down'}.`);
+    });
 
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
@@ -497,6 +641,14 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
     }
   }
 
+  // Disclosure helpers for the tab/shortcut pickers: keep aria-expanded in
+  // sync and return focus to the trigger when a panel closes.
+  function setPickerState(trigger: HTMLButtonElement, panel: HTMLElement, open: boolean): void {
+    panel.hidden = !open;
+    trigger.setAttribute('aria-expanded', String(open));
+    if (!open && document.contains(trigger)) trigger.focus();
+  }
+
   async function openTabPicker(): Promise<void> {
     const tabs = await chrome.tabs.query({ currentWindow: true });
     const httpTabs = tabs.filter(t => t.url && /^https?:\/\//i.test(t.url));
@@ -532,12 +684,12 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
         tabPickListEl.appendChild(label);
       });
     }
-    tabPickerEl.hidden = false;
+    setPickerState(pickTabsBtn, tabPickerEl, true);
   }
 
   addAllTabsBtn.addEventListener('click', addAllOpenTabs);
-  pickTabsBtn.addEventListener('click', () => { shortcutPickerEl.hidden = true; void openTabPicker(); });
-  cancelPickerBtn.addEventListener('click', () => { tabPickerEl.hidden = true; });
+  pickTabsBtn.addEventListener('click', () => { setPickerState(pickShortcutsBtn, shortcutPickerEl, false); void openTabPicker(); });
+  cancelPickerBtn.addEventListener('click', () => { setPickerState(pickTabsBtn, tabPickerEl, false); });
 
   async function openRedirectTabPicker(): Promise<void> {
     const tabs = await chrome.tabs.query({ currentWindow: true });
@@ -578,7 +730,7 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
             autofillKey = redirectKeyInput.value;
           }
           renderRedirectUrlAncestors(tab.url);
-          redirectTabPickerEl.hidden = true;
+          setPickerState(pickRedirectTabBtn, redirectTabPickerEl, false);
         };
 
         row.append(favicon, title);
@@ -593,11 +745,11 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
         redirectTabPickListEl.appendChild(row);
       });
     }
-    redirectTabPickerEl.hidden = false;
+    setPickerState(pickRedirectTabBtn, redirectTabPickerEl, true);
   }
 
   pickRedirectTabBtn.addEventListener('click', () => { void openRedirectTabPicker(); });
-  cancelRedirectPickerBtn.addEventListener('click', () => { redirectTabPickerEl.hidden = true; });
+  cancelRedirectPickerBtn.addEventListener('click', () => { setPickerState(pickRedirectTabBtn, redirectTabPickerEl, false); });
 
   useSelectedTabsBtn.addEventListener('click', () => {
     const urls = Array.from(tabPickListEl.querySelectorAll<HTMLInputElement>('.tab-pick-cb:checked'))
@@ -607,7 +759,7 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
       removeBlankUrlRows();
       urls.forEach(url => addUrlRow(url));
     }
-    tabPickerEl.hidden = true;
+    setPickerState(pickTabsBtn, tabPickerEl, false);
   });
 
   function openShortcutPicker(): void {
@@ -645,11 +797,11 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
         shortcutPickListEl.appendChild(label);
       });
     }
-    shortcutPickerEl.hidden = false;
+    setPickerState(pickShortcutsBtn, shortcutPickerEl, true);
   }
 
-  pickShortcutsBtn.addEventListener('click', () => { tabPickerEl.hidden = true; openShortcutPicker(); });
-  cancelShortcutPickerBtn.addEventListener('click', () => { shortcutPickerEl.hidden = true; });
+  pickShortcutsBtn.addEventListener('click', () => { setPickerState(pickTabsBtn, tabPickerEl, false); openShortcutPicker(); });
+  cancelShortcutPickerBtn.addEventListener('click', () => { setPickerState(pickShortcutsBtn, shortcutPickerEl, false); });
 
   useSelectedShortcutsBtn.addEventListener('click', () => {
     const urls = Array.from(shortcutPickListEl.querySelectorAll<HTMLInputElement>('.shortcut-pick-cb:checked'))
@@ -659,7 +811,7 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
       removeBlankUrlRows();
       urls.forEach(url => addUrlRow(url));
     }
-    shortcutPickerEl.hidden = true;
+    setPickerState(pickShortcutsBtn, shortcutPickerEl, false);
   });
 
   function setBundleStatus(msg: string, type: 'error' | 'success' | '' = ''): void {
@@ -728,13 +880,26 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
 
     const key = normalizeKey(bundleKeyInput.value);
     const label = bundleLabelInput.value.trim() || undefined;
-    const urls = Array.from(urlListEl.querySelectorAll<HTMLInputElement>('input.url-input'))
-      .map((i) => normalizeUrl(i.value))
+    const rawUrls = Array.from(urlListEl.querySelectorAll<HTMLInputElement>('input.url-input'))
+      .map((i) => i.value.trim())
       .filter(Boolean);
+    const urls = rawUrls.map((u) => normalizeUrl(u)).filter(Boolean);
 
     if (!key) { setBundleStatus('Enter a keyword.', 'error'); return; }
     if (key.length > MAX_KEY_LENGTH) {
       setBundleStatus(`Keyword is too long (max ${MAX_KEY_LENGTH} characters).`, 'error');
+      return;
+    }
+    if (label && label.length > MAX_LABEL_LENGTH) {
+      setBundleStatus(`Label is too long (max ${MAX_LABEL_LENGTH} characters).`, 'error');
+      return;
+    }
+    if (rawUrls.length > MAX_BUNDLE_URLS) {
+      setBundleStatus(`A bundle can hold at most ${MAX_BUNDLE_URLS} URLs (remove ${rawUrls.length - MAX_BUNDLE_URLS}).`, 'error');
+      return;
+    }
+    if (rawUrls.some((u) => u.length > MAX_URL_LENGTH)) {
+      setBundleStatus(`A bundle URL is too long (max ${MAX_URL_LENGTH} characters).`, 'error');
       return;
     }
     if (urls.length < 2) { setBundleStatus('Add at least 2 valid http(s) URLs.', 'error'); return; }
@@ -825,6 +990,7 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
     if (firefoxHint) firefoxHint.hidden = !IS_FIREFOX;
 
     settingsCache = { ...store.settings };
+    dirtySettingsFields.clear();
     renderSettings();
 
     settingsStatusEl.textContent = '';
@@ -853,7 +1019,9 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
       settingsStatusEl.className = 'form-status error';
       return;
     }
-    await saveSettings({ ...settingsCache, maxShortcuts: value });
+    settingsCache = { ...settingsCache, maxShortcuts: value };
+    dirtySettingsFields.delete(maxShortcutsInput);
+    await saveSettings(settingsCache);
     settingsStatusEl.textContent = 'Saved.';
     settingsStatusEl.className = 'form-status success';
   });
@@ -869,7 +1037,9 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
       filterThresholdStatusEl.className = 'form-status error';
       return;
     }
-    await saveSettings({ ...settingsCache, filterThreshold: value });
+    settingsCache = { ...settingsCache, filterThreshold: value };
+    dirtySettingsFields.delete(filterThresholdInput);
+    await saveSettings(settingsCache);
     filterThresholdStatusEl.textContent = 'Saved.';
     filterThresholdStatusEl.className = 'form-status success';
   });
@@ -885,7 +1055,10 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
       staleStatusEl.className = 'form-status error';
       return;
     }
-    await saveSettings({ ...settingsCache, staleAutoDelete: staleToggle.checked, staleDays: days });
+    settingsCache = { ...settingsCache, staleAutoDelete: staleToggle.checked, staleDays: days };
+    dirtySettingsFields.delete(staleToggle);
+    dirtySettingsFields.delete(staleDaysInput);
+    await saveSettings(settingsCache);
     staleStatusEl.textContent = 'Saved.';
     staleStatusEl.className = 'form-status success';
   });
@@ -898,12 +1071,16 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
   });
 
   darkModeToggle.addEventListener('change', async () => {
-    await saveSettings({ ...settingsCache, darkMode: darkModeToggle.checked });
+    settingsCache = { ...settingsCache, darkMode: darkModeToggle.checked };
+    dirtySettingsFields.delete(darkModeToggle);
+    await saveSettings(settingsCache);
     applyDarkMode(darkModeToggle.checked);
   });
 
   smartSuggestionsToggle.addEventListener('change', async () => {
-    await saveSettings({ ...settingsCache, smartSuggestions: smartSuggestionsToggle.checked });
+    settingsCache = { ...settingsCache, smartSuggestions: smartSuggestionsToggle.checked };
+    dirtySettingsFields.delete(smartSuggestionsToggle);
+    await saveSettings(settingsCache);
   });
 
   // ── Export / Import ───────────────────────────────────────────────────────────
@@ -951,6 +1128,11 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
     // (smartSuggestions, staleAutoDelete, staleDays) are skipped on purpose
     // so a shared shortcut file can't silently weaken privacy or cleanup
     // protections for the person importing it.
+    // Settings are parsed here but committed only inside finishImport(), after
+    // the user resolves collisions. Writing them earlier (a) applied changes on
+    // Cancel and (b) on a first-ever settings write triggered stale cleanup,
+    // which could delete the very record the collision check below protects.
+    let pendingSettings: Partial<UserSettings> | null = null;
     if (payload.settings && typeof payload.settings === 'object') {
       const raw = payload.settings as Record<string, unknown>;
       const sanitized: Partial<UserSettings> = {};
@@ -961,10 +1143,7 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
         sanitized.filterThreshold = Math.min(500, Math.max(1, Math.round(raw.filterThreshold)));
       }
       if (typeof raw.darkMode === 'boolean') sanitized.darkMode = raw.darkMode;
-      if (Object.keys(sanitized).length > 0) {
-        const store = await getStore();
-        try { await saveSettings({ ...store.settings, ...sanitized }); } catch { /* ignore */ }
-      }
+      if (Object.keys(sanitized).length > 0) pendingSettings = sanitized;
     }
     // Parse and validate every entry before ANY shortcut write happens: a
     // rejected entry can never partially corrupt the store, and collision
@@ -1017,27 +1196,52 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
       replaced: number,
       skippedExisting: number,
     ): Promise<void> => {
-      const count = Object.keys(chosenWrites).length;
+      const currentStore = await getStore();
+      const cap = currentStore.settings.maxShortcuts;
+      const currentCount = Object.keys(currentStore.shortcuts).length;
+      let newSlots = Math.max(0, cap - currentCount);
+      const withinCap: Record<string, Shortcut> = {};
+      let skippedOverCap = 0;
+      for (const [storageKey, shortcut] of Object.entries(chosenWrites)) {
+        if (Object.prototype.hasOwnProperty.call(currentStore.shortcuts, shortcut.key)) {
+          withinCap[storageKey] = shortcut;
+        } else if (newSlots > 0) {
+          withinCap[storageKey] = shortcut;
+          newSlots--;
+        } else {
+          skippedOverCap++;
+        }
+      }
+      const count = Object.keys(withinCap).length;
       if (count > 0) {
         // Single batched write: one storage operation regardless of size, so
         // a large import can't trip chrome.storage.sync's per-minute quota.
         try {
-          await bulkWriteShortcuts(chosenWrites);
+          await bulkWriteShortcuts(withinCap);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          dataStatusEl.textContent = msg.toLowerCase().includes('quota')
-            ? 'Storage quota exceeded — import failed. Delete some shortcuts to free up space.'
+          dataStatusEl.textContent = /quota/i.test(msg)
+            ? `Import failed — ${msg}`
             : `Import failed: ${msg}`;
           dataStatusEl.className = 'form-status error';
           importFile.value = '';
           return;
         }
       }
+      // Apply imported preferences only after the shortcut write succeeds; a
+      // Cancel never reaches this function, so it stays a true no-op.
+      if (pendingSettings) {
+        try {
+          const refreshed = await getStore();
+          await saveSettings({ ...refreshed.settings, ...pendingSettings });
+        } catch { /* non-fatal */ }
+      }
       await importDailyCounts();
       await refresh();
       const notes: string[] = [];
       if (replaced > 0) notes.push(`replaced ${replaced} existing`);
       if (skippedExisting > 0) notes.push(`kept ${skippedExisting} existing`);
+      if (skippedOverCap > 0) notes.push(`${skippedOverCap} skipped over the ${cap} shortcut limit`);
       if (failed > 0) notes.push(`${failed} failed — check console for details`);
       dataStatusEl.textContent = notes.length > 0
         ? `Imported ${count} shortcuts (${notes.join('; ')}).`
@@ -1055,16 +1259,18 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
     const existingStore = await getStore();
     const collidingKeys = Object.values(writes)
       .map((s) => s.key)
-      .filter((k) => Boolean(existingStore.shortcuts[k]));
+      .filter((k) => Object.prototype.hasOwnProperty.call(existingStore.shortcuts, k));
 
     if (imported > 0 && collidingKeys.length > 0) {
       dataStatusEl.className = 'form-status';
       dataStatusEl.textContent = '';
 
+      // Show the record's actual destination. For parameterized shortcuts that
+      // is the template (not the fallback URL) and for bundles every tab, so a
+      // shared file cannot hide an attacker template behind a trusted host.
       const hostOf = (key: string): string => {
         const sc = writes[`${SHORTCUT_PREFIX}${key}`];
-        if (!sc) return 'a new target';
-        try { return new URL(sc.url).hostname; } catch { return 'a new target'; }
+        return sc ? describeTarget(sc) : 'a new target';
       };
       const shown = collidingKeys.slice(0, 6);
 
@@ -1080,7 +1286,13 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
         btn.type = 'button';
         btn.className = 'btn-link confirm-overwrite';
         btn.textContent = label;
-        btn.addEventListener('click', () => void onClick());
+        btn.addEventListener('click', () => {
+          void onClick().catch((err) => {
+            console.error('OmniJump: import failed', err);
+            dataStatusEl.textContent = `Import failed: ${err instanceof Error ? err.message : String(err)}`;
+            dataStatusEl.className = 'form-status error';
+          });
+        });
         return btn;
       };
 
@@ -1091,7 +1303,9 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
         makeChoiceButton('Skip existing', () => {
           const kept: Record<string, Shortcut> = {};
           for (const [storageKey, shortcut] of Object.entries(writes)) {
-            if (!existingStore.shortcuts[shortcut.key]) kept[storageKey] = shortcut;
+            if (!Object.prototype.hasOwnProperty.call(existingStore.shortcuts, shortcut.key)) {
+              kept[storageKey] = shortcut;
+            }
           }
           return finishImport(kept, 0, collidingKeys.length);
         }),
@@ -1136,15 +1350,15 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
         handled = true;
       }
       if (!tabPickerEl.hidden) {
-        tabPickerEl.hidden = true;
+        setPickerState(pickTabsBtn, tabPickerEl, false);
         handled = true;
       }
       if (!redirectTabPickerEl.hidden) {
-        redirectTabPickerEl.hidden = true;
+        setPickerState(pickRedirectTabBtn, redirectTabPickerEl, false);
         handled = true;
       }
       if (!shortcutPickerEl.hidden) {
-        shortcutPickerEl.hidden = true;
+        setPickerState(pickShortcutsBtn, shortcutPickerEl, false);
         handled = true;
       }
       if (!handled && !panelBundle.hidden && !cancelBundleEditBtn.hidden) {
@@ -1152,6 +1366,28 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
         handled = true;
       }
       if (handled) return;
+    }
+
+    // ARIA tabs keyboard pattern. Reaching this point means the target is not
+    // an input; handle tabs before the shortcut-list j/k/arrow handler.
+    const tabTarget = e.target instanceof HTMLElement ? e.target.closest<HTMLButtonElement>('[role="tab"]') : null;
+    if (tabTarget) {
+      const tabs = [tabShortcutsBtn, tabBundleBtn, tabSettingsBtn];
+      const idx = tabs.indexOf(tabTarget);
+      if (idx >= 0 && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+        e.preventDefault();
+        const next = e.key === 'Home'
+          ? 0
+          : e.key === 'End'
+            ? tabs.length - 1
+            : (idx + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+        const target = tabs[next]!;
+        target.focus();
+        if (target === tabShortcutsBtn) showTab('shortcuts');
+        else if (target === tabBundleBtn) showTab('bundle');
+        else tabSettingsBtn.click();
+      }
+      return;
     }
 
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -1227,7 +1463,11 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
   // ── Live sync ─────────────────────────────────────────────────────────────────
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'sync' && Object.keys(changes).some(k => k.startsWith(SHORTCUT_PREFIX) || k === SETTINGS_KEY)) {
-      scheduleRefresh();
+      if (isStatOnlyChange(changes)) {
+        applyStatOnlyChanges(changes);
+      } else {
+        scheduleRefresh();
+      }
     }
     if (area === 'local' && DAILY_KEY in changes && !panelSettings.hidden) {
       const counts = (changes[DAILY_KEY].newValue ?? {}) as Record<string, number>;
@@ -1255,18 +1495,45 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
     }
 
     const tabId = tab.id;
-    saveSuggestionBtn.onclick = async () => {
-      // Validate at the write boundary like every other save path.
+    const persistSuggestion = async (key: string): Promise<void> => {
       const url = normalizeUrl(suggestion.url);
       if (!url) {
         suggestionEl.hidden = true;
         return;
       }
-      await upsertShortcut({ key: suggestion.key, url, type: 'redirect' });
+      await upsertShortcut({ key, url, type: 'redirect' });
       await chrome.storage.session.remove(`suggestion_${tabId}`);
       await chrome.action.setBadgeText({ tabId, text: '' });
       suggestionEl.hidden = true;
+      setRedirectStatus(savedStatusMessage(key, shortcutCache.length + 1), 'success');
       await refresh();
+    };
+
+    saveSuggestionBtn.onclick = async () => {
+      const url = normalizeUrl(suggestion.url);
+      if (!url) {
+        suggestionEl.hidden = true;
+        return;
+      }
+      // Same overwrite guard as the forms: saving a suggestion must never
+      // silently repoint (or convert) an existing keyword.
+      const store = await getStore();
+      const existing = Object.prototype.hasOwnProperty.call(store.shortcuts, suggestion.key)
+        ? store.shortcuts[suggestion.key]
+        : undefined;
+      const candidate: Shortcut = { key: suggestion.key, url, type: 'redirect' };
+      if (existing && hasShortcutTargetCollision(existing, candidate)) {
+        const alt = uniqueKey(suggestion.key, new Set(Object.keys(store.shortcuts)));
+        renderOverwriteConfirm(
+          suggestionTextEl,
+          existing,
+          alt,
+          () => void persistSuggestion(suggestion.key),
+          (altKey) => void persistSuggestion(altKey),
+        );
+        return;
+      }
+      await persistSuggestion(suggestion.key);
     };
 
     dismissSuggestionBtn.onclick = async () => {

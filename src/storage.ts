@@ -3,6 +3,8 @@ import {
   MAX_BUNDLE_URLS,
   MAX_KEY_LENGTH,
   MAX_LABEL_LENGTH,
+  MAX_PARAMETERIZED_KEY_LENGTH,
+  MAX_SYNC_ITEM_BYTES,
   MAX_URL_LENGTH,
   STARTER_SHORTCUTS,
   Shortcut,
@@ -78,6 +80,20 @@ function clampTimestamp(value: unknown, now: number): number | undefined {
     : undefined;
 }
 
+// Approximate serialized size of one chrome.storage.sync item: the JSON
+// storage key plus the JSON-encoded record. The real quota is 8,192 bytes per
+// item; MAX_SYNC_ITEM_BYTES leaves headroom.
+export function shortcutItemBytes(key: string, shortcut: Shortcut): number {
+  return `${SHORTCUT_PREFIX}${key}`.length + JSON.stringify(shortcut).length;
+}
+
+export function isShortcutItemTooLarge(key: string, shortcut: Shortcut): boolean {
+  return shortcutItemBytes(key, shortcut) > MAX_SYNC_ITEM_BYTES;
+}
+
+export const SYNC_ITEM_TOO_LARGE_MESSAGE =
+  'This shortcut is too large for Chrome Sync — shorten the URL or remove bundle URLs.';
+
 // Records can arrive via cross-device sync, older extension versions, or
 // hand-edited storage, bypassing import validation. Coerce (never drop) them
 // so downstream consumers only ever see well-typed fields: garbage timestamps
@@ -85,8 +101,23 @@ function clampTimestamp(value: unknown, now: number): number | undefined {
 // and far-future timestamps are clamped to now.
 function coerceStoredShortcut(raw: Shortcut, key: string, now: number): Shortcut {
   const s: Shortcut = { ...raw, key };
-  if (typeof s.url !== 'string') s.url = '';
+  if (typeof s.url !== 'string') {
+    s.url = '';
+  } else {
+    // Re-apply the write validator on read: sync records can be edited by hand
+    // or poisoned by another client, and a template with %s in the authority
+    // would otherwise reach the DNR substitution.
+    s.url = normalizeUrl(s.url) || '';
+  }
   if (!VALID_TYPES.has(s.type)) s.type = 'redirect';
+  if (typeof s.urlTemplate === 'string') {
+    const normalizedTemplate = normalizeUrl(s.urlTemplate);
+    if (!normalizedTemplate || !normalizedTemplate.includes('%s')) {
+      delete s.urlTemplate;
+    } else {
+      s.urlTemplate = normalizedTemplate;
+    }
+  }
   if (s.label !== undefined && (typeof s.label !== 'string' || !s.label.trim())) {
     delete s.label;
   }
@@ -134,7 +165,11 @@ export type SanitizeResult =
 // to now (imported far-future records would otherwise evade stale cleanup),
 // caps field lengths, and derives the parameterized fallback URL. Interactive
 // forms do their own field-by-field validation and call upsertShortcut.
-export function sanitizeShortcut(raw: unknown, now: number): SanitizeResult {
+export function sanitizeShortcut(
+  raw: unknown,
+  now: number,
+  options: { allowLegacyKeyLength?: boolean } = {},
+): SanitizeResult {
   if (!raw || typeof raw !== 'object') {
     return { ok: false, reason: 'entry is not an object' };
   }
@@ -146,9 +181,6 @@ export function sanitizeShortcut(raw: unknown, now: number): SanitizeResult {
   if (!key) {
     return { ok: false, reason: 'empty key after normalization' };
   }
-  if (key.length > MAX_KEY_LENGTH) {
-    return { ok: false, reason: `keyword longer than ${MAX_KEY_LENGTH} characters` };
-  }
 
   const rawType = typeof r.type === 'string' ? r.type : 'redirect';
   if (!VALID_TYPES.has(rawType)) {
@@ -156,9 +188,21 @@ export function sanitizeShortcut(raw: unknown, now: number): SanitizeResult {
   }
   const type = rawType as Shortcut['type'];
 
+  const maxKeyLength = type === 'parameterized' ? MAX_PARAMETERIZED_KEY_LENGTH : MAX_KEY_LENGTH;
+  // Undo/restore may bring back a record saved by an older version with a
+  // longer key; refusing it would silently lose the user's data. Imports and
+  // new writes stay strict.
+  const maxAllowedKeyLength = options.allowLegacyKeyLength ? 64 : maxKeyLength;
+  if (key.length > maxAllowedKeyLength) {
+    return { ok: false, reason: `keyword longer than ${maxAllowedKeyLength} characters` };
+  }
+
   let label: string | undefined;
   if (typeof r.label === 'string' && r.label.trim()) {
-    label = r.label.trim().slice(0, MAX_LABEL_LENGTH);
+    if (r.label.trim().length > MAX_LABEL_LENGTH) {
+      return { ok: false, reason: `label longer than ${MAX_LABEL_LENGTH} characters` };
+    }
+    label = r.label.trim();
   }
 
   const createdAt = clampTimestamp(r.createdAt, now);
@@ -172,17 +216,27 @@ export function sanitizeShortcut(raw: unknown, now: number): SanitizeResult {
     if (!Array.isArray(r.bundleUrls)) {
       return { ok: false, reason: 'missing bundleUrls array' };
     }
-    const bundleUrls = r.bundleUrls
-      .slice(0, MAX_BUNDLE_URLS)
-      .map((u) => (typeof u === 'string' && u.length <= MAX_URL_LENGTH ? normalizeUrl(u) : ''))
-      .filter(Boolean);
+    if (r.bundleUrls.length > MAX_BUNDLE_URLS) {
+      return { ok: false, reason: `more than ${MAX_BUNDLE_URLS} URLs (found ${r.bundleUrls.length})` };
+    }
+    const bundleUrls: string[] = [];
+    for (const u of r.bundleUrls) {
+      if (typeof u !== 'string' || u.length > MAX_URL_LENGTH) {
+        return { ok: false, reason: `a bundle URL is missing or longer than ${MAX_URL_LENGTH} characters` };
+      }
+      const normalized = normalizeUrl(u);
+      if (normalized) bundleUrls.push(normalized);
+    }
     if (bundleUrls.length < 2) {
       return { ok: false, reason: 'fewer than 2 valid URLs' };
     }
-    return {
-      ok: true,
-      shortcut: { key, type, url: bundleUrls[0]!, bundleUrls, label, createdAt, lastUsed, useCount },
+    const bundle: Shortcut = {
+      key, type, url: bundleUrls[0]!, bundleUrls, label, createdAt, lastUsed, useCount,
     };
+    if (isShortcutItemTooLarge(key, bundle)) {
+      return { ok: false, reason: SYNC_ITEM_TOO_LARGE_MESSAGE };
+    }
+    return { ok: true, shortcut: bundle };
   }
 
   if (type === 'parameterized') {
@@ -194,14 +248,20 @@ export function sanitizeShortcut(raw: unknown, now: number): SanitizeResult {
     }
     const urlTemplate = normalizeUrl(r.urlTemplate);
     const rawFallback = typeof r.url === 'string' ? r.url : undefined;
+    if (rawFallback && rawFallback.length > MAX_URL_LENGTH) {
+      return { ok: false, reason: 'fallback URL too long' };
+    }
     const url = urlTemplate ? deriveSearchFallbackUrl(urlTemplate, rawFallback) : '';
     if (!urlTemplate || !url) {
       return { ok: false, reason: 'invalid urlTemplate or fallback URL' };
     }
-    return {
-      ok: true,
-      shortcut: { key, type, url, urlTemplate, label, createdAt, lastUsed, useCount },
+    const parameterized: Shortcut = {
+      key, type, url, urlTemplate, label, createdAt, lastUsed, useCount,
     };
+    if (isShortcutItemTooLarge(key, parameterized)) {
+      return { ok: false, reason: SYNC_ITEM_TOO_LARGE_MESSAGE };
+    }
+    return { ok: true, shortcut: parameterized };
   }
 
   if (typeof r.url !== 'string' || r.url.length > MAX_URL_LENGTH) {
@@ -211,7 +271,50 @@ export function sanitizeShortcut(raw: unknown, now: number): SanitizeResult {
   if (!url) {
     return { ok: false, reason: 'invalid or empty URL' };
   }
-  return { ok: true, shortcut: { key, type, url, label, createdAt, lastUsed, useCount } };
+  const redirect: Shortcut = { key, type, url, label, createdAt, lastUsed, useCount };
+  if (isShortcutItemTooLarge(key, redirect)) {
+    return { ok: false, reason: SYNC_ITEM_TOO_LARGE_MESSAGE };
+  }
+  return { ok: true, shortcut: redirect };
+}
+
+// Interactive write boundary: forms, popup, and inline editors validate fields
+// for UX, then every path passes through here so storage enforces the same
+// invariants as import/restore. Returns nothing and throws on the first
+// violation; messages are user-facing.
+export function assertShortcutWithinLimits(
+  shortcut: Shortcut,
+  options: { allowLegacyKeyLength?: boolean } = {},
+): void {
+  const maxKeyLength = shortcut.type === 'parameterized' ? MAX_PARAMETERIZED_KEY_LENGTH : MAX_KEY_LENGTH;
+  const maxAllowedKeyLength = options.allowLegacyKeyLength ? 64 : maxKeyLength;
+  if (!shortcut.key) throw new Error('Keyword cannot be empty.');
+  if (shortcut.key.length > maxAllowedKeyLength) {
+    throw new Error(`Keyword is too long (max ${maxKeyLength} characters).`);
+  }
+  if (shortcut.label && shortcut.label.length > MAX_LABEL_LENGTH) {
+    throw new Error(`Label is too long (max ${MAX_LABEL_LENGTH} characters).`);
+  }
+  if (shortcut.type === 'bundle') {
+    const urls = shortcut.bundleUrls ?? [];
+    if (urls.length > MAX_BUNDLE_URLS) {
+      throw new Error(`A bundle can hold at most ${MAX_BUNDLE_URLS} URLs.`);
+    }
+    for (const url of urls) {
+      if (url.length > MAX_URL_LENGTH) {
+        throw new Error(`A bundle URL is too long (max ${MAX_URL_LENGTH} characters).`);
+      }
+    }
+  }
+  if (shortcut.type === 'parameterized' && (!shortcut.urlTemplate || shortcut.urlTemplate.length > MAX_URL_LENGTH)) {
+    throw new Error(`Search URL is too long (max ${MAX_URL_LENGTH} characters).`);
+  }
+  if (shortcut.url.length > MAX_URL_LENGTH) {
+    throw new Error(`URL is too long (max ${MAX_URL_LENGTH} characters).`);
+  }
+  if (isShortcutItemTooLarge(shortcut.key, shortcut)) {
+    throw new Error(SYNC_ITEM_TOO_LARGE_MESSAGE);
+  }
 }
 
 export function coerceShortcutRecord(
@@ -226,18 +329,34 @@ export function coerceShortcutRecord(
   return coerceStoredShortcut(candidate, key, now);
 }
 
+export function coerceSettings(raw: unknown): UserSettings {
+  const next: UserSettings = { ...DEFAULT_SETTINGS };
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return next;
+  const r = raw as Record<string, unknown>;
+  const numberInRange = (value: unknown, min: number, max: number, fallback: number): number =>
+    typeof value === 'number' && Number.isFinite(value)
+      ? Math.min(max, Math.max(min, Math.round(value)))
+      : fallback;
+
+  next.maxShortcuts = numberInRange(r.maxShortcuts, 1, 500, DEFAULT_SETTINGS.maxShortcuts);
+  next.filterThreshold = numberInRange(r.filterThreshold, 1, 500, DEFAULT_SETTINGS.filterThreshold);
+  next.staleDays = numberInRange(r.staleDays, 7, 365, DEFAULT_SETTINGS.staleDays);
+  if (typeof r.staleAutoDelete === 'boolean') next.staleAutoDelete = r.staleAutoDelete;
+  if (typeof r.darkMode === 'boolean') next.darkMode = r.darkMode;
+  if (typeof r.smartSuggestions === 'boolean') next.smartSuggestions = r.smartSuggestions;
+  return next;
+}
+
 export function parseStoreFromRecords(
   all: Record<string, unknown>,
   now = Date.now(),
 ): ShortcutStore {
   const shortcuts: Record<string, Shortcut> = {};
-  let settings: UserSettings = DEFAULT_SETTINGS;
+  let settings: UserSettings = { ...DEFAULT_SETTINGS };
 
   for (const [k, v] of Object.entries(all)) {
     if (k === SETTINGS_KEY) {
-      if (v && typeof v === 'object' && !Array.isArray(v)) {
-        settings = { ...DEFAULT_SETTINGS, ...(v as UserSettings) };
-      }
+      settings = coerceSettings(v);
     } else if (k.startsWith(SHORTCUT_PREFIX)) {
       const coerced = coerceShortcutRecord(v, k.slice(SHORTCUT_PREFIX.length), now);
       if (coerced) {
@@ -387,13 +506,64 @@ export async function getStore(): Promise<ShortcutStore> {
   return parseStoreFromRecords(all);
 }
 
-export async function upsertShortcut(shortcut: Shortcut): Promise<ShortcutStore> {
-  const store = await getStore();
+// Serializes read-check-write sequences in this context. MV3 extension pages
+// and the service worker each run their own copy, so a cross-context
+// navigator.locks gate is layered on top where it is available.
+let shortcutWriteQueue: Promise<void> = Promise.resolve();
+
+function enqueueShortcutWrite<T>(task: () => Promise<T>): Promise<T> {
+  const run = shortcutWriteQueue.then(task, task);
+  shortcutWriteQueue = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+function withCrossContextWriteLock<T>(task: () => Promise<T>): Promise<T> {
+  // Only real extension contexts have both chrome.runtime.id and a useful
+  // cross-context lock. Node/unit-test runtimes may expose navigator.locks but
+  // resolve it on a macrotask, which would make storage writes needlessly slow.
+  const runtimeId = (globalThis.chrome as { runtime?: { id?: string } } | undefined)?.runtime?.id;
+  if (!runtimeId) return task();
+  const locks = (globalThis.navigator as unknown as {
+    locks?: { request: <R>(name: string, callback: () => Promise<R>) => Promise<R> };
+  } | undefined)?.locks;
+  if (!locks || typeof locks.request !== 'function') return task();
+  try {
+    return locks.request('omnijump-shortcut-write', task);
+  } catch {
+    return task();
+  }
+}
+
+function mapStorageError(err: unknown): Error {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes('MAX_WRITE_OPERATIONS_PER_MINUTE')) {
+    return new Error('Too many changes in a short time. Please wait a moment and try again.');
+  }
+  if (/quota/i.test(msg)) {
+    if (/QUOTA_BYTES_PER_ITEM|per.?item/i.test(msg)) {
+      return new Error(SYNC_ITEM_TOO_LARGE_MESSAGE);
+    }
+    return new Error('Storage quota exceeded. Delete some shortcuts to free up space.');
+  }
+  return err instanceof Error ? err : new Error(msg);
+}
+
+export function upsertShortcut(shortcut: Shortcut): Promise<ShortcutStore> {
+  return enqueueShortcutWrite(() => withCrossContextWriteLock(() => upsertShortcutUnlocked(shortcut)));
+}
+
+async function upsertShortcutUnlocked(shortcut: Shortcut): Promise<ShortcutStore> {
   const key = normalizeKey(shortcut.key);
 
   if (!key) {
     throw new Error('Shortcut key is empty after normalization.');
   }
+
+  const store = await getStore();
+  // An existing over-cap key (saved by an older version) may still be edited;
+  // only introducing a too-long key is rejected.
+  const isNewKey = !Object.prototype.hasOwnProperty.call(store.shortcuts, key);
+  assertShortcutWithinLimits({ ...shortcut, key }, { allowLegacyKeyLength: !isNewKey });
 
   const isNew = !Object.prototype.hasOwnProperty.call(store.shortcuts, key);
   const max = store.settings.maxShortcuts ?? DEFAULT_SETTINGS.maxShortcuts;
@@ -417,14 +587,7 @@ export async function upsertShortcut(shortcut: Shortcut): Promise<ShortcutStore>
   try {
     await chrome.storage.sync.set({ [`${SHORTCUT_PREFIX}${key}`]: normalized });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('MAX_WRITE_OPERATIONS_PER_MINUTE')) {
-      throw new Error('Too many changes in a short time. Please wait a moment and try again.');
-    }
-    if (msg.includes('quota') || msg.includes('QUOTA_BYTES') || msg.toLowerCase().includes('quota')) {
-      throw new Error('Storage quota exceeded. Delete some shortcuts to free up space.');
-    }
-    throw err;
+    throw mapStorageError(err);
   }
 
   store.shortcuts[key] = normalized;
@@ -436,8 +599,9 @@ export async function upsertShortcut(shortcut: Shortcut): Promise<ShortcutStore>
 }
 
 export async function saveSettings(settings: UserSettings): Promise<void> {
-  await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
-  await mirrorSessionDelta({ [SETTINGS_KEY]: { newValue: settings } });
+  const next = coerceSettings(settings);
+  await chrome.storage.sync.set({ [SETTINGS_KEY]: next });
+  await mirrorSessionDelta({ [SETTINGS_KEY]: { newValue: next } });
 }
 
 // One-time migration from the old single-key format (both sync and local) to per-key sync storage.
@@ -514,29 +678,55 @@ export async function deleteShortcuts(keys: string[]): Promise<void> {
 // Writes a pre-validated batch of shortcut records in one storage operation
 // (used by JSON import to respect chrome.storage.sync per-minute write quotas)
 // while keeping the session mirror coherent.
-export async function bulkWriteShortcuts(writes: Record<string, Shortcut>): Promise<void> {
-  if (Object.keys(writes).length === 0) return;
-  await chrome.storage.sync.set(writes);
-  await mirrorSessionDelta(
-    Object.fromEntries(Object.entries(writes).map(([k, v]) => [k, { newValue: v }])),
-  );
+export function bulkWriteShortcuts(writes: Record<string, Shortcut>): Promise<void> {
+  return enqueueShortcutWrite(() => withCrossContextWriteLock(async () => {
+    if (Object.keys(writes).length === 0) return;
+    for (const shortcut of Object.values(writes)) assertShortcutWithinLimits(shortcut);
+    try {
+      await chrome.storage.sync.set(writes);
+    } catch (err) {
+      throw mapStorageError(err);
+    }
+    await mirrorSessionDelta(
+      Object.fromEntries(Object.entries(writes).map(([k, v]) => [k, { newValue: v }])),
+    );
+  }));
+}
+
+export interface RestoreResult {
+  restored: number;
+  /** Keys not restored because they are invalid or were re-created during the undo window. */
+  skipped: string[];
 }
 
 // Restores deleted shortcuts (keeping stats and timestamps), in one
 // batched write. Used by delete-undo; upsertShortcut would reset lastUsed.
 // Records pass through sanitizeShortcut so the undo path maintains the same
-// "only validated data enters storage" invariant as import and migration;
-// for shortcuts deleted by the current version this is a no-op.
-export async function restoreShortcuts(shortcuts: Shortcut[]): Promise<void> {
+// "only validated data enters storage" invariant as import and migration.
+// Keys re-created while the undo toast was open are skipped rather than
+// clobbered, and the caller reports any partial restore.
+export async function restoreShortcuts(shortcuts: Shortcut[]): Promise<RestoreResult> {
   const now = Date.now();
+  const store = await getStore();
   const writes: Record<string, Shortcut> = {};
+  const skipped: string[] = [];
   for (const s of shortcuts) {
-    const result = sanitizeShortcut(s, now);
-    if (result.ok) writes[`${SHORTCUT_PREFIX}${result.shortcut.key}`] = result.shortcut;
+    const result = sanitizeShortcut(s, now, { allowLegacyKeyLength: true });
+    if (!result.ok) {
+      skipped.push(normalizeKey(String((s as { key?: unknown } | null)?.key ?? '')) || '(invalid)');
+      continue;
+    }
+    const key = result.shortcut.key;
+    if (Object.prototype.hasOwnProperty.call(store.shortcuts, key)) {
+      skipped.push(key);
+      continue;
+    }
+    writes[`${SHORTCUT_PREFIX}${key}`] = result.shortcut;
   }
   if (Object.keys(writes).length > 0) {
     await bulkWriteShortcuts(writes);
   }
+  return { restored: Object.keys(writes).length, skipped };
 }
 
 let touchQueue: Promise<void> = Promise.resolve();
@@ -586,10 +776,15 @@ export function touchShortcut(key: string): Promise<void> {
   return touchQueue;
 }
 
-export async function renameShortcut(originalKey: string, updated: Shortcut): Promise<void> {
+export function renameShortcut(originalKey: string, updated: Shortcut): Promise<void> {
+  return enqueueShortcutWrite(() => withCrossContextWriteLock(() => renameShortcutUnlocked(originalKey, updated)));
+}
+
+async function renameShortcutUnlocked(originalKey: string, updated: Shortcut): Promise<void> {
   const oldKey = normalizeKey(originalKey);
   const newKey = normalizeKey(updated.key);
   if (!newKey) throw new Error('Keyword cannot be empty.');
+  assertShortcutWithinLimits({ ...updated, key: newKey }, { allowLegacyKeyLength: newKey === oldKey });
 
   const oldStorageKey = `${SHORTCUT_PREFIX}${oldKey}`;
   const newStorageKey = `${SHORTCUT_PREFIX}${newKey}`;
@@ -618,14 +813,7 @@ export async function renameShortcut(originalKey: string, updated: Shortcut): Pr
       await chrome.storage.sync.remove(oldStorageKey);
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('MAX_WRITE_OPERATIONS_PER_MINUTE')) {
-      throw new Error('Too many changes in a short time. Please wait a moment and try again.');
-    }
-    if (msg.includes('quota') || msg.includes('QUOTA_BYTES') || msg.toLowerCase().includes('quota')) {
-      throw new Error('Storage quota exceeded. Delete some shortcuts to free up space.');
-    }
-    throw err;
+    throw mapStorageError(err);
   }
 
   const delta: Record<string, StorageChangeLike> = {

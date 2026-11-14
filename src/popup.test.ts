@@ -30,7 +30,8 @@ describe('popup layout and margins/padding integrity', () => {
 });
 
 async function flushPromises(): Promise<void> {
-  for (let i = 0; i < 10; i++) {
+  // Storage writes go through the serialization queue and session mirror.
+  for (let i = 0; i < 60; i++) {
     await Promise.resolve();
   }
 }
@@ -308,5 +309,54 @@ describe('popup runtime behavior', () => {
     expect(sessionAfterDismiss['suggestion_8']).toBeUndefined();
     const dismissed = await getDismissedHosts();
     expect(dismissed.has('news.ycombinator.com')).toBe(true);
+  });
+});
+
+describe('popup suggestion overwrite guard', () => {
+  let mockChrome: ReturnType<typeof createChromeMock>;
+  let els: ReturnType<typeof buildPopupDom>;
+
+  beforeEach(() => {
+    vi.resetModules();
+    mockChrome = createChromeMock();
+    els = buildPopupDom();
+    (globalThis as any).chrome = mockChrome.chrome;
+    (globalThis as any).document = els.dom.doc;
+    (globalThis as any).window = { close: vi.fn() };
+  });
+
+  it('prompts instead of silently repointing an existing keyword, and can save under an alternative', async () => {
+    await upsertShortcut({ key: 'hn', url: 'https://clone.example', type: 'redirect' });
+    await mockChrome.chrome.storage.session.set({
+      suggestion_9: {
+        key: 'hn',
+        url: 'https://news.ycombinator.com/',
+        siteName: 'Hacker News',
+        host: 'news.ycombinator.com',
+      },
+    });
+    vi.mocked(mockChrome.chrome.tabs.query).mockResolvedValue([
+      { id: 9, url: 'https://news.ycombinator.com/' } as chrome.tabs.Tab,
+    ]);
+
+    await import('./popup');
+    await flushPromises();
+    expect(els.suggestion.hidden).toBe(false);
+
+    await els.saveSuggestion.click();
+    await flushPromises();
+
+    // Existing record untouched; a confirmation is shown in the status area.
+    expect((await getStore()).shortcuts['hn'].url).toBe('https://clone.example');
+    const buttons = els.status.querySelectorAll('button') as unknown as Array<{ textContent: string; click: () => Promise<void> }>;
+    expect(buttons.map((b) => b.textContent)).toEqual(['Overwrite', 'Save as "hn2"']);
+
+    await buttons[1]!.click();
+    await flushPromises();
+
+    const store = await getStore();
+    expect(store.shortcuts['hn'].url).toBe('https://clone.example');
+    expect(store.shortcuts['hn2'].url).toBe('https://news.ycombinator.com/');
+    expect(els.suggestion.hidden).toBe(true);
   });
 });

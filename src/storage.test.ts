@@ -775,3 +775,100 @@ describe('session mirror helpers (readSessionStore / writeSessionStore / mirrorS
     ).resolves.toBeDefined();
   });
 });
+
+describe('audit regressions: settings coercion and write-boundary limits', () => {
+  it('coerces malformed synced settings instead of letting them delete shortcuts', async () => {
+    const now = Date.now();
+    syncStore[SETTINGS_KEY] = {
+      staleDays: null,
+      maxShortcuts: 'many',
+      filterThreshold: -5,
+      staleAutoDelete: 'false',
+      smartSuggestions: 'false',
+      darkMode: 1,
+    };
+    syncStore[`${SHORTCUT_PREFIX}fresh`] = {
+      key: 'fresh', url: 'https://fresh.example', type: 'redirect', createdAt: now,
+    };
+
+    const store = await getStore();
+    expect(store.settings.staleDays).toBe(DEFAULT_SETTINGS.staleDays);
+    expect(store.settings.maxShortcuts).toBe(DEFAULT_SETTINGS.maxShortcuts);
+    expect(store.settings.filterThreshold).toBe(1);
+    expect(store.settings.staleAutoDelete).toBe(DEFAULT_SETTINGS.staleAutoDelete);
+    expect(store.settings.smartSuggestions).toBe(false);
+    expect(store.settings.darkMode).toBe(false);
+
+    await cleanupStaleShortcuts();
+    expect(syncStore[`${SHORTCUT_PREFIX}fresh`]).toBeDefined();
+  });
+
+  it('clamps out-of-range numeric settings on read', async () => {
+    syncStore[SETTINGS_KEY] = { ...DEFAULT_SETTINGS, staleDays: -30, maxShortcuts: 9000, filterThreshold: 0 };
+    const store = await getStore();
+    expect(store.settings.staleDays).toBe(7);
+    expect(store.settings.maxShortcuts).toBe(500);
+    expect(store.settings.filterThreshold).toBe(1);
+  });
+
+  it('rejects over-cap fields at upsert instead of storing records undo/import cannot restore', async () => {
+    await expect(
+      upsertShortcut({ key: 'longurl', url: `https://example.com/${'a'.repeat(2100)}`, type: 'redirect' }),
+    ).rejects.toThrow(/URL is too long/);
+    await expect(
+      upsertShortcut({ key: 'longlabel', url: 'https://example.com', type: 'redirect', label: 'x'.repeat(257) }),
+    ).rejects.toThrow(/Label is too long/);
+    await expect(
+      upsertShortcut({ key: 'bigbundle', url: 'https://a.example', type: 'bundle', bundleUrls: Array.from({ length: 33 }, (_, i) => `https://e${i}.example`) }),
+    ).rejects.toThrow(/at most 32 URLs/);
+    await expect(
+      upsertShortcut({ key: 'a'.repeat(41), url: 'https://example.com', type: 'redirect' }),
+    ).rejects.toThrow(/Keyword is too long/);
+    await expect(
+      upsertShortcut({ key: 'p'.repeat(29), url: 'https://example.com', urlTemplate: 'https://example.com/?q=%s', type: 'parameterized' }),
+    ).rejects.toThrow(/Keyword is too long/);
+  });
+
+  it('rejects a bundle whose per-item serialization exceeds the sync item budget', async () => {
+    const urls = Array.from({ length: 5 }, (_, i) => `https://e${i}.example/${'a'.repeat(1900)}`);
+    await expect(
+      upsertShortcut({ key: 'toobig', url: urls[0]!, type: 'bundle', bundleUrls: urls }),
+    ).rejects.toThrow(/too large for Chrome Sync/);
+  });
+
+  it('restoreShortcuts skips a keyword re-created during the undo window', async () => {
+    await upsertShortcut({ key: 'gh', url: 'https://github.com', type: 'redirect' });
+    const original = (await getStore()).shortcuts['gh']!;
+    await deleteShortcut('gh');
+    await upsertShortcut({ key: 'gh', url: 'https://gitlab.com', type: 'redirect' });
+
+    const result = await restoreShortcuts([original]);
+    expect(result).toEqual({ restored: 0, skipped: ['gh'] });
+    expect((await getStore()).shortcuts['gh']!.url).toBe('https://gitlab.com');
+  });
+
+  it('serializes concurrent creates at the shortcut cap', async () => {
+    syncStore[SETTINGS_KEY] = { ...DEFAULT_SETTINGS, maxShortcuts: 1 };
+    const results = await Promise.allSettled([
+      upsertShortcut({ key: 'racea', url: 'https://a.example', type: 'redirect' }),
+      upsertShortcut({ key: 'raceb', url: 'https://b.example', type: 'redirect' }),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    expect(Object.keys((await getStore()).shortcuts)).toHaveLength(1);
+  });
+
+  it('rejects an over-cap key in an import but allows editing an existing legacy key', async () => {
+    const legacyKey = 'l'.repeat(50);
+    syncStore[`${SHORTCUT_PREFIX}${legacyKey}`] = {
+      key: legacyKey, url: 'https://legacy.example', type: 'redirect',
+    };
+    await expect(
+      upsertShortcut({ key: 'n'.repeat(41), url: 'https://new.example', type: 'redirect' }),
+    ).rejects.toThrow(/Keyword is too long/);
+    // Editing the legacy record in place is allowed so old data is not stranded.
+    await expect(
+      upsertShortcut({ key: legacyKey, url: 'https://legacy.example/updated', type: 'redirect' }),
+    ).resolves.toBeDefined();
+  });
+});

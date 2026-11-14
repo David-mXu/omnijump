@@ -1,6 +1,6 @@
 import { deleteShortcut, normalizeKey, renameShortcut, restoreShortcuts, touchShortcut, upsertShortcut } from './storage';
 import { icon } from './icons';
-import { MAX_KEY_LENGTH, Shortcut } from './types';
+import { MAX_KEY_LENGTH, MAX_LABEL_LENGTH, MAX_PARAMETERIZED_KEY_LENGTH, MAX_URL_LENGTH, Shortcut } from './types';
 import { deriveSearchFallbackUrl, normalizeUrl } from './suggest';
 
 export { deriveSearchFallbackUrl, normalizeUrl };
@@ -137,6 +137,21 @@ export function showUndoToast(message: string, onUndo: () => void | Promise<void
   toastTimer = setTimeout(() => { toast.remove(); toastTimer = null; }, 6000);
 }
 
+// Transient non-actionable status message (used when an undo only partially
+// succeeds, where offering another Undo would be misleading).
+export function showToast(message: string): void {
+  if (typeof document === 'undefined') return;
+  document.querySelector('.undo-toast')?.remove();
+  const toast = document.createElement('div');
+  toast.className = 'undo-toast';
+  toast.setAttribute('role', 'status');
+  const text = document.createElement('span');
+  text.textContent = message;
+  toast.appendChild(text);
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 6000);
+}
+
 // Opens a shortcut the way the omnibar would: bundles open every tab.
 export function openShortcut(shortcut: Shortcut): void {
   const urls = (shortcut.type === 'bundle' && shortcut.bundleUrls?.length
@@ -227,6 +242,10 @@ export function showDeleteConfirmToast(
 
 let editingRow: HTMLLIElement | null = null;
 
+export function isRowEditing(): boolean {
+  return editingRow !== null;
+}
+
 export function cancelRowEdit(): void {
   cancelPendingDelete();
   if (editingRow) {
@@ -290,16 +309,25 @@ async function saveEdit(
     statusEl.textContent = 'Keyword cannot be empty.';
     return;
   }
-  if (newKey.length > MAX_KEY_LENGTH) {
-    statusEl.textContent = `Keyword is too long (max ${MAX_KEY_LENGTH} characters).`;
+  const maxKeyLength = original.type === 'parameterized' ? MAX_PARAMETERIZED_KEY_LENGTH : MAX_KEY_LENGTH;
+  if (newKey.length > maxKeyLength) {
+    statusEl.textContent = `Keyword is too long (max ${maxKeyLength} characters).`;
     return;
   }
 
   const trimmedLabel = (original.type === 'bundle' ? urlOrLabel : (rawLabel ?? '')).trim();
+  if (trimmedLabel.length > MAX_LABEL_LENGTH) {
+    statusEl.textContent = `Label is too long (max ${MAX_LABEL_LENGTH} characters).`;
+    return;
+  }
 
   try {
     let updated: Shortcut;
     if (original.type === 'redirect') {
+      if (urlOrLabel.trim().length > MAX_URL_LENGTH) {
+        statusEl.textContent = `URL is too long (max ${MAX_URL_LENGTH} characters).`;
+        return;
+      }
       const url = normalizeUrl(urlOrLabel);
       if (!url) { statusEl.textContent = 'Enter a valid http(s) URL.'; return; }
       updated = { ...original, key: newKey, url, label: trimmedLabel || undefined };
@@ -307,6 +335,10 @@ async function saveEdit(
       const rawTemplate = urlTemplate?.trim() || '';
       if (!rawTemplate.includes('%s')) {
         statusEl.textContent = 'Search URL must include %s.';
+        return;
+      }
+      if (rawTemplate.length > MAX_URL_LENGTH) {
+        statusEl.textContent = `Search URL is too long (max ${MAX_URL_LENGTH} characters).`;
         return;
       }
       const normalizedTemplate = normalizeUrl(rawTemplate);
@@ -442,8 +474,11 @@ export function buildShortcutRow(
     await deleteShortcut(shortcut.key);
     await onRender();
     showUndoToast(`Deleted "${shortcut.key}"`, async () => {
-      await restoreShortcuts([shortcut]);
+      const result = await restoreShortcuts([shortcut]);
       await onRender();
+      if (result.skipped.length > 0) {
+        showToast(`Could not restore "${shortcut.key}" — that keyword is now in use.`);
+      }
     });
   };
 

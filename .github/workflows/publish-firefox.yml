@@ -42,10 +42,20 @@ jobs:
       - run: npm ci
       - run: npm run build:firefox
 
+      - name: Package source archive
+        # AMO requires a source archive for bundled/minified extensions.
+        # Include every input needed to reproduce dist/firefox (see BUILD.md).
+        run: |
+          zip -r firefox-source.zip \
+            src scripts images \
+            package.json package-lock.json tsconfig.json vite.config.ts BUILD.md
+
       - name: Submit to Firefox Add-ons
         # Secrets via env (never on argv): web-ext reads them natively, and
         # the tool itself is the package.json-pinned copy with lockfile
         # integrity via `npm ci` above — no floating npx downloads here.
+        # --approval-timeout=0 submits and returns instead of blocking the
+        # job for the default 15 minutes while a reviewer approves.
         env:
           WEB_EXT_API_KEY: ${{ secrets.FIREFOX_API_KEY }}
           WEB_EXT_API_SECRET: ${{ secrets.FIREFOX_API_SECRET }}
@@ -53,4 +63,6 @@ jobs:
           npx web-ext sign \
             --channel=listed \
             --source-dir=dist/firefox \
-            --artifacts-dir=web-ext-artifacts
+            --artifacts-dir=web-ext-artifacts \
+            --upload-source-code=firefox-source.zip \
+            --approval-timeout=0

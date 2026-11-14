@@ -830,7 +830,7 @@ describe('7. Omnibox "oj" Keyword (onInputChanged, onInputEntered)', () => {
     await flushPromises();
 
     expect(chrome.tabs.create).toHaveBeenCalledWith({
-      url: 'https://www.youtube.com/results?search_query=synthwave%20mix\x00\x07',
+      url: 'https://www.youtube.com/results?search_query=synthwave%20mix',
       active: true,
     });
     expect((syncStore['omnibar_s_yt'] as Shortcut).useCount).toBe(6);
@@ -1199,5 +1199,45 @@ describe('9. Session Mirror & MV3 Service Worker Pre-Warming (Option A)', () => 
 
     expect(chrome.tabs.update).not.toHaveBeenCalled();
     expect(chrome.storage.sync.get).not.toHaveBeenCalled();
+  });
+});
+
+describe('10. Settings-change cleanup trigger', () => {
+  it('does not run stale cleanup on the first settings write when stale fields match defaults', async () => {
+    const { storage } = await loadBackground(CHROME_UA);
+    const old = Date.now() - 100 * 86_400_000;
+    syncStore[`${storage.SHORTCUT_PREFIX}old`] = {
+      key: 'old',
+      url: 'https://old.example',
+      type: 'redirect',
+      createdAt: old,
+      lastUsed: old,
+    };
+
+    await chrome.storage.sync.set({
+      [storage.SETTINGS_KEY]: { ...DEFAULT_SETTINGS, darkMode: true },
+    });
+    await flushPromises(50);
+
+    expect(syncStore[`${storage.SHORTCUT_PREFIX}old`]).toBeDefined();
+  });
+
+  it('still runs cleanup when stale settings actually change', async () => {
+    const { storage } = await loadBackground(CHROME_UA);
+    const old = Date.now() - 100 * 86_400_000;
+    syncStore[`${storage.SHORTCUT_PREFIX}old`] = {
+      key: 'old',
+      url: 'https://old.example',
+      type: 'redirect',
+      createdAt: old,
+      lastUsed: old,
+    };
+
+    await chrome.storage.sync.set({
+      [storage.SETTINGS_KEY]: { ...DEFAULT_SETTINGS, staleDays: 30 },
+    });
+    await flushPromises(60);
+
+    expect(syncStore[`${storage.SHORTCUT_PREFIX}old`]).toBeUndefined();
   });
 });

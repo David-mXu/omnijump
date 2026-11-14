@@ -6,6 +6,7 @@ import {
   SHORTCUT_PREFIX,
    cleanupStaleShortcuts,
   clearSessionStore,
+  coerceSettings,
   coerceShortcutRecord,
   getDismissedHosts,
   getStore,
@@ -139,7 +140,10 @@ function buildSuggestedKey(host: string, store: ShortcutStore): string {
 // In-memory guard checked synchronously so two near-simultaneous events in
 // the same worker instance can't both pass the async session-storage check.
 const recentBundleTriggers = new Map<number, number>();
-const recentJsRedirects = new Map<number, { url: string; time: number }>();
+// Per-tab set of targets we redirected to recently. Keeping only the last
+// target let two shortcuts that point at each other's search URLs bounce
+// forever; a short history breaks 2- and 3-cycles.
+const recentJsRedirects = new Map<number, Map<string, number>>();
 
 async function shouldHandleBundle(tabId: number): Promise<boolean> {
   const now = Date.now();
@@ -156,7 +160,12 @@ async function shouldHandleBundle(tabId: number): Promise<boolean> {
 function extractQuery(url: string): string | null {
   try {
     const parsed = new URL(url);
-    return parsed.searchParams.get('q');
+    const q = parsed.searchParams.get('q');
+    if (q !== null) return q;
+    // Startpage's documented manual search string uses ?query= (see dnr.ts).
+    const host = parsed.hostname.replace(/^www\./, '');
+    if (host === 'startpage.com') return parsed.searchParams.get('query');
+    return null;
   } catch {
     return null;
   }
@@ -446,7 +455,7 @@ function applyChangesToCachedStore(
         change.newValue && typeof change.newValue === 'object' && !Array.isArray(change.newValue)
           ? (change.newValue as Partial<ShortcutStore['settings']>)
           : {};
-      cachedStore.settings = { ...DEFAULT_SETTINGS, ...nextSettings };
+      cachedStore.settings = coerceSettings(nextSettings);
     }
   }
 }
@@ -483,11 +492,15 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 
   if (SETTINGS_KEY in changes) {
-    const oldSettings = changes[SETTINGS_KEY].oldValue as ShortcutStore['settings'] | undefined;
-    const newSettings = changes[SETTINGS_KEY].newValue as ShortcutStore['settings'] | undefined;
+    // A first-ever settings write has no oldValue. Compare against the defaults
+    // instead of treating undefined as "changed": otherwise importing settings
+    // (or toggling dark mode) spuriously runs stale cleanup and can delete
+    // records before an import's collision check sees them.
+    const oldSettings = (changes[SETTINGS_KEY].oldValue as ShortcutStore['settings'] | undefined) ?? DEFAULT_SETTINGS;
+    const newSettings = (changes[SETTINGS_KEY].newValue as ShortcutStore['settings'] | undefined) ?? DEFAULT_SETTINGS;
     if (
-      oldSettings?.staleAutoDelete !== newSettings?.staleAutoDelete ||
-      oldSettings?.staleDays !== newSettings?.staleDays
+      oldSettings.staleAutoDelete !== newSettings.staleAutoDelete ||
+      oldSettings.staleDays !== newSettings.staleDays
     ) {
       void cleanupStaleShortcuts();
     }
@@ -626,11 +639,22 @@ async function handleJsRedirect(url: string, tabId: number): Promise<boolean> {
   if (!target || !isHttpUrl(target)) return false;
 
   const now = Date.now();
-  const prev = recentJsRedirects.get(tabId);
-  if (prev && prev.url === target && now - prev.time < 1500) {
+  let recent = recentJsRedirects.get(tabId);
+  if (!recent) {
+    recent = new Map();
+    recentJsRedirects.set(tabId, recent);
+  }
+  for (const [url, at] of recent) {
+    if (now - at > 1500) recent.delete(url);
+  }
+  if (recent.has(target)) {
     return true;
   }
-  recentJsRedirects.set(tabId, { url: target, time: now });
+  recent.set(target, now);
+  if (recent.size > 8) {
+    const oldest = recent.keys().next().value;
+    if (oldest !== undefined) recent.delete(oldest);
+  }
 
   try {
     await chrome.tabs.update(tabId, { url: target });

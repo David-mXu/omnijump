@@ -40,7 +40,7 @@
   --destructive-weak: #fef2f2;    /* red-50 */
   --destructive-foreground: #ffffff;
 
-  --success: #16a34a;             /* emerald-600 */
+  --success: #047857;             /* emerald-700: 5.48:1 on white (AA) */
   --success-weak: #f0fdf4;        /* emerald-50 */
 
   --border: #e2e8f0;              /* slate-200 */
@@ -70,7 +70,7 @@
   --badge-fg: var(--accent);
   --badge-border: var(--accent-border);
   --badge-search-bg: #ecfdf5;     /* emerald-50 */
-  --badge-search-fg: #059669;     /* emerald-600 */
+  --badge-search-fg: #047857;     /* emerald-700: 5.21:1 on emerald-50 (AA) */
   --badge-search-border: #a7f3d0; /* emerald-200 */
 
   /* ── Focus Ring ──────────────────────────────────────────────────────── */

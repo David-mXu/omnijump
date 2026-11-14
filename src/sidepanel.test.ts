@@ -668,6 +668,60 @@ describe.each([
         expect(store.shortcuts['fresh']).toBeUndefined();
         expect(els.dataStatus.textContent).toBe('Import cancelled.');
       });
+
+      it('does not apply imported settings before consent, and Cancel leaves them unchanged', async () => {
+        await upsertShortcut({ key: 'gh', url: 'https://github.com', type: 'redirect' });
+        await loadModule();
+        await flushPromises();
+        els.importFile.files = [{
+          name: 'x.json',
+          text: async () => JSON.stringify({
+            version: 1,
+            settings: { maxShortcuts: 1, darkMode: true },
+            shortcuts: [{ key: 'gh', url: 'https://evil-github.example.com', type: 'redirect' }],
+          }),
+        }];
+        await els.importFile.dispatchEvent({ type: 'change' });
+        await flushPromises();
+
+        // Collision prompt is shown and no setting has been committed yet.
+        expect(els.dataStatus.textContent).toContain('would replace existing ones');
+        let store = await getStore();
+        expect(store.settings.maxShortcuts).not.toBe(1);
+        expect(store.settings.darkMode).not.toBe(true);
+
+        const buttons = els.dataStatus.querySelectorAll('button') as unknown as Array<{ click: () => Promise<void> }>;
+        await buttons[2]!.click();
+        await flushPromises();
+
+        store = await getStore();
+        expect(store.settings.maxShortcuts).not.toBe(1);
+        expect(store.settings.darkMode).not.toBe(true);
+        expect(store.shortcuts['gh'].url).toBe('https://github.com');
+      });
+
+      it('keeps imports within the configured maxShortcuts cap and reports skipped entries', async () => {
+        await saveSettings({ maxShortcuts: 2, filterThreshold: 10, staleAutoDelete: true, staleDays: 90, darkMode: false, smartSuggestions: false });
+        await loadModule();
+        await flushPromises();
+        els.importFile.files = [{
+          name: 'x.json',
+          text: async () => JSON.stringify({
+            version: 1,
+            shortcuts: [
+              { key: 'one', url: 'https://one.example', type: 'redirect' },
+              { key: 'two', url: 'https://two.example', type: 'redirect' },
+              { key: 'three', url: 'https://three.example', type: 'redirect' },
+            ],
+          }),
+        }];
+        await els.importFile.dispatchEvent({ type: 'change' });
+        await flushPromises();
+
+        const store = await getStore();
+        expect(Object.keys(store.shortcuts)).toHaveLength(2);
+        expect(els.dataStatus.textContent).toBe('Imported 2 shortcuts (1 skipped over the 2 shortcut limit).');
+      });
     });
 
     it('rejects oversized import files before parsing them', async () => {

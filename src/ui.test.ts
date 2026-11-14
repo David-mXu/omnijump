@@ -25,7 +25,9 @@ const {
 const { upsertShortcut, getStore } = await import('./storage');
 
 async function flushPromises(): Promise<void> {
-  for (let i = 0; i < 10; i++) {
+  // Storage writes now pass through a serialization queue and the session
+  // mirror, so settling takes more microtask turns than a bare set().
+  for (let i = 0; i < 60; i++) {
     await Promise.resolve();
   }
 }
