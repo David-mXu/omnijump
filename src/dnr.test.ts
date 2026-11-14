@@ -4,6 +4,7 @@ import { isSearchEngineUrl, rebuildDynamicRules } from './dnr';
 import { SHORTCUT_PREFIX, upsertShortcut } from './storage';
 
 let syncStore: Record<string, unknown>;
+let sessionStore: Record<string, unknown>;
 let dnrRules: chrome.declarativeNetRequest.Rule[];
 
 // Every shortcut gets one rule per search engine (each regexFilter must stay
@@ -14,6 +15,7 @@ beforeEach(() => {
   const mock = createChromeMock();
   globalThis.chrome = mock.chrome;
   syncStore = mock.syncStore;
+  sessionStore = mock.sessionStore;
   dnrRules = mock.dnrRules;
 });
 
@@ -112,6 +114,25 @@ describe('rebuildDynamicRules', () => {
     it('keeps every regexFilter small enough for Chrome to compile', () => {
       for (const rule of dnrRules) {
         expect((rule.condition.regexFilter ?? '').length).toBeLessThanOrEqual(160);
+      }
+    });
+
+    it('keeps max-length redirect and search keys under the RE2 heuristic', async () => {
+      const redirectKey = 'r'.repeat(40);
+      const searchKey = 's'.repeat(28);
+      syncStore[`${SHORTCUT_PREFIX}${redirectKey}`] = {
+        key: redirectKey, url: 'https://example.com/redirect', type: 'redirect',
+      };
+      syncStore[`${SHORTCUT_PREFIX}${searchKey}`] = {
+        key: searchKey,
+        url: 'https://example.com/search',
+        urlTemplate: 'https://example.com/search?q=%s',
+        type: 'parameterized',
+      };
+      await rebuildDynamicRules();
+      expect(dnrRules.length).toBeGreaterThan(0);
+      for (const rule of dnrRules) {
+        expect((rule.condition.regexFilter ?? '').length).toBeLessThanOrEqual(200);
       }
     });
 
@@ -409,6 +430,8 @@ describe('malformed records and concurrency', () => {
     expect(dnrRules).toHaveLength(142 * ENGINE_COUNT);
     expect(dnrRules.some(rule => rule.condition.regexFilter?.includes('q=k142'))).toBe(false);
     expect(warn.mock.calls.some(call => String(call[0]).includes('k142'))).toBe(true);
+    // The UI reads this session key to explain why some shortcuts are slower.
+    expect(sessionStore['omnibar_dnr_skipped']).toContain('k142');
     // Do not enter the per-rule recovery loop for an over-quota bulk update.
     expect(update).toHaveBeenCalledTimes(1);
     warn.mockRestore();

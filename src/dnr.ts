@@ -33,8 +33,9 @@ function maxAvailableRegexRules(): number {
 // this as risky and warn, since long user keywords also inflate the pattern.
 // Raised to 200 after the Google-host hardening above: per-engine patterns are
 // alternation-free, so even ~200 chars compile to a RE2 program far under the
-// 2 KB limit (keywords are capped at 64 chars on all write surfaces, which
-// keeps every pattern under ~210 chars).
+// 2 KB limit. Keywords are capped at 40 chars (28 for parameterized) on new
+// writes, which keeps every pattern near this heuristic; the real limit is the
+// compiled program size, which is why longer legacy keys can still lose rules.
 const MAX_SAFE_REGEX_LENGTH = 200;
 
 interface SearchEngine {

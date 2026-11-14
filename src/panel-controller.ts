@@ -382,8 +382,9 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
     showUndoToast(`Deleted ${deleted.length} shortcut${deleted.length === 1 ? '' : 's'}`, async () => {
       const result = await restoreShortcuts(deleted);
       await refresh();
-      if (result.skipped.length > 0) {
-        showToast(`Restored ${result.restored}; skipped ${result.skipped.length} — keyword already in use.`);
+      const notRestored = result.skipped.length + result.invalid.length;
+      if (notRestored > 0) {
+        showToast(`Restored ${result.restored}; ${notRestored} could not be restored (keyword in use or record invalid).`);
       }
     });
   });
@@ -644,9 +645,12 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
   // Disclosure helpers for the tab/shortcut pickers: keep aria-expanded in
   // sync and return focus to the trigger when a panel closes.
   function setPickerState(trigger: HTMLButtonElement, panel: HTMLElement, open: boolean): void {
+    const wasOpen = !panel.hidden;
     panel.hidden = !open;
     trigger.setAttribute('aria-expanded', String(open));
-    if (!open && document.contains(trigger)) trigger.focus();
+    // Only return focus when this call actually closed an open panel; closing
+    // an already-hidden sibling must not steal focus from the one opening.
+    if (!open && wasOpen && document.contains(trigger)) trigger.focus();
   }
 
   async function openTabPicker(): Promise<void> {
@@ -886,8 +890,11 @@ export function initPanelController(options: PanelControllerOptions = {}): void 
     const urls = rawUrls.map((u) => normalizeUrl(u)).filter(Boolean);
 
     if (!key) { setBundleStatus('Enter a keyword.', 'error'); return; }
-    if (key.length > MAX_KEY_LENGTH) {
-      setBundleStatus(`Keyword is too long (max ${MAX_KEY_LENGTH} characters).`, 'error');
+    // Editing a legacy bundle keeps its (possibly over-cap) keyword valid.
+    const keyUnchanged = editingBundleKey !== null && key === normalizeKey(editingBundleKey);
+    const maxKeyLength = keyUnchanged ? 64 : MAX_KEY_LENGTH;
+    if (key.length > maxKeyLength) {
+      setBundleStatus(`Keyword is too long (max ${maxKeyLength} characters).`, 'error');
       return;
     }
     if (label && label.length > MAX_LABEL_LENGTH) {

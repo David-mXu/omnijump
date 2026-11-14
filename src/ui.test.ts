@@ -432,7 +432,9 @@ describe('Inline row editing (buildShortcutRow & saveEdit)', () => {
     store = await getStore();
     expect(store.shortcuts['docs'].url).toBe('https://changed.example.com');
     expect(store.shortcuts['docs'].label).toBe('Team Docs');
-    expect(renderCount).toBe(1);
+    // Escape replayed the render that was deferred while the editor was open,
+    // then the successful save rendered again.
+    expect(renderCount).toBe(2);
   });
 });
 
@@ -626,5 +628,28 @@ describe('UI helper functions', () => {
     const storeAfter = await getStore();
     expect(storeAfter.shortcuts['mix'].useCount).toBe(1);
     expect(storeAfter.shortcuts['mix'].lastUsed).toBeTypeOf('number');
+  });
+});
+
+describe('legacy keyword edits', () => {
+  it('allows editing the URL of a record whose key exceeds the new DNR-safe cap', async () => {
+    const legacyKey = 'x'.repeat(50);
+    // Simulate a record written by 1.2.5, when the key cap was 64.
+    await mockChrome.chrome.storage.sync.set({
+      [`omnibar_s_${legacyKey}`]: { key: legacyKey, url: 'https://old.example', type: 'redirect' },
+    });
+    const store = await getStore();
+    let renderCount = 0;
+    const row = buildShortcutRow(store.shortcuts[legacyKey]!, async () => { renderCount++; }) as any;
+    domMock.body.appendChild(row);
+
+    await row.querySelector('.edit-btn').click();
+    const [, urlInput] = row.querySelectorAll('.edit-form input');
+    urlInput.value = 'https://new.example';
+    await row.querySelector('.edit-actions .btn-primary').click();
+    await flushPromises();
+
+    expect((await getStore()).shortcuts[legacyKey]!.url).toBe('https://new.example');
+    expect(renderCount).toBe(1);
   });
 });

@@ -215,6 +215,7 @@ function buildPanelDom() {
     shortcutList,
     importFile,
     dataStatus,
+    maxShortcutsInput,
   };
 }
 
@@ -250,6 +251,50 @@ describe.each([
       const hint = els.dom.doc.getElementById('firefoxShortcutHint');
       expect(hint?.hidden).toBe(false);
       expect(mockChrome.chrome.tabs.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('settings and list live-sync behavior', () => {
+    it('does not overwrite a Settings value the user has typed when a shortcut write lands', async () => {
+      vi.useFakeTimers();
+      try {
+        await loadModule();
+        await flushPromises();
+        await els.tabSettings.click();
+        await flushPromises();
+
+        els.maxShortcutsInput.value = '123';
+        await els.maxShortcutsInput.dispatchEvent({ type: 'input' });
+
+        await upsertShortcut({ key: 'touch', url: 'https://touch.example', type: 'redirect' });
+        await vi.advanceTimersByTimeAsync(80);
+        await flushPromises();
+
+        expect(els.maxShortcutsInput.value).toBe('123');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('patches usage-only writes without replacing the list rows', async () => {
+      for (let i = 0; i < 12; i++) {
+        await upsertShortcut({ key: `row${i}`, url: `https://row${i}.example`, type: 'redirect' });
+      }
+      await loadModule();
+      await flushPromises();
+
+      const firstRow = els.shortcutList.children[0];
+      expect(firstRow).toBeTruthy();
+
+      const record = (await getStore()).shortcuts['row0']!;
+      await mockChrome.chrome.storage.sync.set({
+        [`omnibar_s_row0`]: { ...record, useCount: 7, lastUsed: Date.now() },
+      });
+      await flushPromises();
+
+      // No full rebuild: the same DOM node stays in place, with updated stats.
+      expect(els.shortcutList.children[0]).toBe(firstRow);
+      expect(firstRow.querySelector('.stats')?.textContent).toContain('7×');
     });
   });
 

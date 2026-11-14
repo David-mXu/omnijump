@@ -81,7 +81,6 @@ export const MAX_IMPORT_FILE_BYTES = 2 * 1024 * 1024; // 2 MB
 export const MAX_SYNC_ITEM_BYTES = 7900;
 
 // Chrome allows 1,000 regex DNR rules; a redirect shortcut costs 7 (one per
-// engine) and a parameterized one costs 14. About 142 redirect keys can be
-// intercepted before navigation; beyond that, shortcuts still work through the
-// JS fallback once the search page loads.
-export const INSTANT_REDIRECT_KEY_CEILING = 142;
+// engine) and a parameterized one costs 14. About 142 redirect keys (or 71
+// search keys) can be intercepted before navigation; beyond that, shortcuts
+// still work through the JS fallback once the search page loads.

@@ -11,7 +11,7 @@ import {
   ShortcutStore,
   UserSettings,
 } from './types';
-import { normalizeUrl, deriveSearchFallbackUrl } from './url';
+import { normalizeUrl, deriveSearchFallbackUrl, sanitizeStoredUrl } from './url';
 
 export const SETTINGS_KEY = 'omnibar_settings';
 export const SHORTCUT_PREFIX = 'omnibar_s_';
@@ -104,10 +104,9 @@ function coerceStoredShortcut(raw: Shortcut, key: string, now: number): Shortcut
   if (typeof s.url !== 'string') {
     s.url = '';
   } else {
-    // Re-apply the write validator on read: sync records can be edited by hand
-    // or poisoned by another client, and a template with %s in the authority
-    // would otherwise reach the DNR substitution.
-    s.url = normalizeUrl(s.url) || '';
+    // Stored URLs keep single-label intranet hosts (http://router/) that the
+    // context-menu path legitimately saves; only unsafe schemes are blanked.
+    s.url = sanitizeStoredUrl(s.url);
   }
   if (!VALID_TYPES.has(s.type)) s.type = 'redirect';
   if (typeof s.urlTemplate === 'string') {
@@ -165,10 +164,17 @@ export type SanitizeResult =
 // to now (imported far-future records would otherwise evade stale cleanup),
 // caps field lengths, and derives the parameterized fallback URL. Interactive
 // forms do their own field-by-field validation and call upsertShortcut.
+export interface ShortcutLimitOptions {
+  /** Accept keys up to the pre-1.2.6 cap (64) for legacy records. */
+  allowLegacyKeyLength?: boolean;
+  /** Skip field-length/bundle-count caps when restoring records we already stored. */
+  allowLegacyLimits?: boolean;
+}
+
 export function sanitizeShortcut(
   raw: unknown,
   now: number,
-  options: { allowLegacyKeyLength?: boolean } = {},
+  options: ShortcutLimitOptions = {},
 ): SanitizeResult {
   if (!raw || typeof raw !== 'object') {
     return { ok: false, reason: 'entry is not an object' };
@@ -199,7 +205,7 @@ export function sanitizeShortcut(
 
   let label: string | undefined;
   if (typeof r.label === 'string' && r.label.trim()) {
-    if (r.label.trim().length > MAX_LABEL_LENGTH) {
+    if (!options.allowLegacyLimits && r.label.trim().length > MAX_LABEL_LENGTH) {
       return { ok: false, reason: `label longer than ${MAX_LABEL_LENGTH} characters` };
     }
     label = r.label.trim();
@@ -216,15 +222,15 @@ export function sanitizeShortcut(
     if (!Array.isArray(r.bundleUrls)) {
       return { ok: false, reason: 'missing bundleUrls array' };
     }
-    if (r.bundleUrls.length > MAX_BUNDLE_URLS) {
+    if (!options.allowLegacyLimits && r.bundleUrls.length > MAX_BUNDLE_URLS) {
       return { ok: false, reason: `more than ${MAX_BUNDLE_URLS} URLs (found ${r.bundleUrls.length})` };
     }
     const bundleUrls: string[] = [];
     for (const u of r.bundleUrls) {
-      if (typeof u !== 'string' || u.length > MAX_URL_LENGTH) {
+      if (typeof u !== 'string' || (!options.allowLegacyLimits && u.length > MAX_URL_LENGTH)) {
         return { ok: false, reason: `a bundle URL is missing or longer than ${MAX_URL_LENGTH} characters` };
       }
-      const normalized = normalizeUrl(u);
+      const normalized = sanitizeStoredUrl(u);
       if (normalized) bundleUrls.push(normalized);
     }
     if (bundleUrls.length < 2) {
@@ -243,12 +249,12 @@ export function sanitizeShortcut(
     if (typeof r.urlTemplate !== 'string' || !r.urlTemplate.includes('%s')) {
       return { ok: false, reason: 'missing %s in urlTemplate' };
     }
-    if (r.urlTemplate.length > MAX_URL_LENGTH) {
+    if (!options.allowLegacyLimits && r.urlTemplate.length > MAX_URL_LENGTH) {
       return { ok: false, reason: 'urlTemplate too long' };
     }
     const urlTemplate = normalizeUrl(r.urlTemplate);
     const rawFallback = typeof r.url === 'string' ? r.url : undefined;
-    if (rawFallback && rawFallback.length > MAX_URL_LENGTH) {
+    if (!options.allowLegacyLimits && rawFallback && rawFallback.length > MAX_URL_LENGTH) {
       return { ok: false, reason: 'fallback URL too long' };
     }
     const url = urlTemplate ? deriveSearchFallbackUrl(urlTemplate, rawFallback) : '';
@@ -264,10 +270,10 @@ export function sanitizeShortcut(
     return { ok: true, shortcut: parameterized };
   }
 
-  if (typeof r.url !== 'string' || r.url.length > MAX_URL_LENGTH) {
+  if (typeof r.url !== 'string' || (!options.allowLegacyLimits && r.url.length > MAX_URL_LENGTH)) {
     return { ok: false, reason: 'missing or too-long URL' };
   }
-  const url = normalizeUrl(r.url);
+  const url = sanitizeStoredUrl(r.url);
   if (!url) {
     return { ok: false, reason: 'invalid or empty URL' };
   }
@@ -284,7 +290,7 @@ export function sanitizeShortcut(
 // violation; messages are user-facing.
 export function assertShortcutWithinLimits(
   shortcut: Shortcut,
-  options: { allowLegacyKeyLength?: boolean } = {},
+  options: ShortcutLimitOptions = {},
 ): void {
   const maxKeyLength = shortcut.type === 'parameterized' ? MAX_PARAMETERIZED_KEY_LENGTH : MAX_KEY_LENGTH;
   const maxAllowedKeyLength = options.allowLegacyKeyLength ? 64 : maxKeyLength;
@@ -292,25 +298,27 @@ export function assertShortcutWithinLimits(
   if (shortcut.key.length > maxAllowedKeyLength) {
     throw new Error(`Keyword is too long (max ${maxKeyLength} characters).`);
   }
-  if (shortcut.label && shortcut.label.length > MAX_LABEL_LENGTH) {
-    throw new Error(`Label is too long (max ${MAX_LABEL_LENGTH} characters).`);
-  }
-  if (shortcut.type === 'bundle') {
-    const urls = shortcut.bundleUrls ?? [];
-    if (urls.length > MAX_BUNDLE_URLS) {
-      throw new Error(`A bundle can hold at most ${MAX_BUNDLE_URLS} URLs.`);
+  if (!options.allowLegacyLimits) {
+    if (shortcut.label && shortcut.label.length > MAX_LABEL_LENGTH) {
+      throw new Error(`Label is too long (max ${MAX_LABEL_LENGTH} characters).`);
     }
-    for (const url of urls) {
-      if (url.length > MAX_URL_LENGTH) {
-        throw new Error(`A bundle URL is too long (max ${MAX_URL_LENGTH} characters).`);
+    if (shortcut.type === 'bundle') {
+      const urls = shortcut.bundleUrls ?? [];
+      if (urls.length > MAX_BUNDLE_URLS) {
+        throw new Error(`A bundle can hold at most ${MAX_BUNDLE_URLS} URLs.`);
+      }
+      for (const url of urls) {
+        if (url.length > MAX_URL_LENGTH) {
+          throw new Error(`A bundle URL is too long (max ${MAX_URL_LENGTH} characters).`);
+        }
       }
     }
-  }
-  if (shortcut.type === 'parameterized' && (!shortcut.urlTemplate || shortcut.urlTemplate.length > MAX_URL_LENGTH)) {
-    throw new Error(`Search URL is too long (max ${MAX_URL_LENGTH} characters).`);
-  }
-  if (shortcut.url.length > MAX_URL_LENGTH) {
-    throw new Error(`URL is too long (max ${MAX_URL_LENGTH} characters).`);
+    if (shortcut.type === 'parameterized' && (!shortcut.urlTemplate || shortcut.urlTemplate.length > MAX_URL_LENGTH)) {
+      throw new Error(`Search URL is too long (max ${MAX_URL_LENGTH} characters).`);
+    }
+    if (shortcut.url.length > MAX_URL_LENGTH) {
+      throw new Error(`URL is too long (max ${MAX_URL_LENGTH} characters).`);
+    }
   }
   if (isShortcutItemTooLarge(shortcut.key, shortcut)) {
     throw new Error(SYNC_ITEM_TOO_LARGE_MESSAGE);
@@ -678,10 +686,13 @@ export async function deleteShortcuts(keys: string[]): Promise<void> {
 // Writes a pre-validated batch of shortcut records in one storage operation
 // (used by JSON import to respect chrome.storage.sync per-minute write quotas)
 // while keeping the session mirror coherent.
-export function bulkWriteShortcuts(writes: Record<string, Shortcut>): Promise<void> {
+export function bulkWriteShortcuts(
+  writes: Record<string, Shortcut>,
+  options: ShortcutLimitOptions = {},
+): Promise<void> {
   return enqueueShortcutWrite(() => withCrossContextWriteLock(async () => {
     if (Object.keys(writes).length === 0) return;
-    for (const shortcut of Object.values(writes)) assertShortcutWithinLimits(shortcut);
+    for (const shortcut of Object.values(writes)) assertShortcutWithinLimits(shortcut, options);
     try {
       await chrome.storage.sync.set(writes);
     } catch (err) {
@@ -695,8 +706,10 @@ export function bulkWriteShortcuts(writes: Record<string, Shortcut>): Promise<vo
 
 export interface RestoreResult {
   restored: number;
-  /** Keys not restored because they are invalid or were re-created during the undo window. */
+  /** Keys skipped because they were re-created during the undo window. */
   skipped: string[];
+  /** Keys that could not be validated at all. */
+  invalid: string[];
 }
 
 // Restores deleted shortcuts (keeping stats and timestamps), in one
@@ -710,10 +723,15 @@ export async function restoreShortcuts(shortcuts: Shortcut[]): Promise<RestoreRe
   const store = await getStore();
   const writes: Record<string, Shortcut> = {};
   const skipped: string[] = [];
+  const invalid: string[] = [];
+  // Undo restores records this extension already stored; accept the legacy
+  // key length and legacy field sizes so an old bundle/label comes back rather
+  // than being silently dropped. The per-item byte budget still applies.
+  const legacy: ShortcutLimitOptions = { allowLegacyKeyLength: true, allowLegacyLimits: true };
   for (const s of shortcuts) {
-    const result = sanitizeShortcut(s, now, { allowLegacyKeyLength: true });
+    const result = sanitizeShortcut(s, now, legacy);
     if (!result.ok) {
-      skipped.push(normalizeKey(String((s as { key?: unknown } | null)?.key ?? '')) || '(invalid)');
+      invalid.push(normalizeKey(String((s as { key?: unknown } | null)?.key ?? '')) || '(invalid)');
       continue;
     }
     const key = result.shortcut.key;
@@ -724,9 +742,17 @@ export async function restoreShortcuts(shortcuts: Shortcut[]): Promise<RestoreRe
     writes[`${SHORTCUT_PREFIX}${key}`] = result.shortcut;
   }
   if (Object.keys(writes).length > 0) {
-    await bulkWriteShortcuts(writes);
+    try {
+      await bulkWriteShortcuts(writes, legacy);
+    } catch (err) {
+      // One unwritable record must not abort the whole undo (and must not
+      // become an unhandled rejection in the UI).
+      console.warn('OmniJump: delete-undo batch was rejected.', err);
+      for (const shortcut of Object.values(writes)) invalid.push(shortcut.key);
+      return { restored: 0, skipped, invalid };
+    }
   }
-  return { restored: Object.keys(writes).length, skipped };
+  return { restored: Object.keys(writes).length, skipped, invalid };
 }
 
 let touchQueue: Promise<void> = Promise.resolve();

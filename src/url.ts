@@ -1,6 +1,26 @@
 // URL validation helpers. Leaf module: no imports, safe to use from both
 // storage.ts and suggest.ts without creating import cycles.
 
+// Storage/restore variant of normalizeUrl. Records that already carry an
+// explicit http(s) scheme are kept as-is even when the host is single-label
+// (http://router/, http://intranet/page) — the context-menu save path and
+// intranet deployments legitimately use those. Schemeless input still goes
+// through normalizeUrl so forms keep their stricter host rules.
+export function sanitizeStoredUrl(input: string): string {
+  if (typeof input !== 'string') return '';
+  const s = input.replace(/[\x00-\x1F\x7F]/g, '').trim();
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) {
+    try {
+      const parsed = new URL(s);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? s : '';
+    } catch {
+      return '';
+    }
+  }
+  return normalizeUrl(s);
+}
+
 export function normalizeUrl(input: string): string {
   if (typeof input !== 'string') return '';
   const s = input.replace(/[\x00-\x1F\x7F]/g, '').trim();

@@ -2,6 +2,7 @@ import { deleteShortcut, normalizeKey, renameShortcut, restoreShortcuts, touchSh
 import { icon } from './icons';
 import { MAX_KEY_LENGTH, MAX_LABEL_LENGTH, MAX_PARAMETERIZED_KEY_LENGTH, MAX_URL_LENGTH, Shortcut } from './types';
 import { deriveSearchFallbackUrl, normalizeUrl } from './suggest';
+import { sanitizeStoredUrl } from './url';
 
 export { deriveSearchFallbackUrl, normalizeUrl };
 
@@ -241,18 +242,34 @@ export function showDeleteConfirmToast(
 }
 
 let editingRow: HTMLLIElement | null = null;
+// The host page's render function. Used to replay a render that was deferred
+// while the inline editor was open, once the editor is cancelled.
+let rowRender: (() => Promise<void>) | null = null;
 
 export function isRowEditing(): boolean {
   return editingRow !== null;
 }
 
-export function cancelRowEdit(): void {
+export function cancelRowEdit(options: { restoreFocus?: boolean } = {}): void {
   cancelPendingDelete();
+  const wasEditing = editingRow !== null;
+  const key = editingRow?.dataset.key;
   if (editingRow) {
     const row = editingRow;
     row.classList.remove('editing');
     editingRow = null;
     row.focus();
+  }
+  if (wasEditing && rowRender) {
+    // Refresh replaces the row, so restore focus to its replacement.
+    const render = rowRender;
+    void Promise.resolve(render()).then(() => {
+      // Callers that move focus elsewhere (the Add-alias path fills the add
+      // form) must win; only Escape/Cancel ask for focus restoration.
+      if (options.restoreFocus && key && typeof document !== 'undefined') {
+        document.querySelector<HTMLLIElement>(`li[data-key="${key}"]`)?.focus();
+      }
+    });
   }
 }
 
@@ -264,7 +281,7 @@ if (typeof document !== 'undefined') {
         return;
       }
       if (editingRow) {
-        cancelRowEdit();
+        cancelRowEdit({ restoreFocus: true });
       }
     }
   });
@@ -309,7 +326,15 @@ async function saveEdit(
     statusEl.textContent = 'Keyword cannot be empty.';
     return;
   }
-  const maxKeyLength = original.type === 'parameterized' ? MAX_PARAMETERIZED_KEY_LENGTH : MAX_KEY_LENGTH;
+  // Records saved by older versions may have keys above the new DNR-safe cap.
+  // Editing them in place is allowed (storage enforces the same rule); only a
+  // rename to a *new* over-cap key is rejected.
+  const keyUnchanged = newKey === normalizeKey(original.key);
+  const maxKeyLength = keyUnchanged
+    ? 64
+    : original.type === 'parameterized'
+      ? MAX_PARAMETERIZED_KEY_LENGTH
+      : MAX_KEY_LENGTH;
   if (newKey.length > maxKeyLength) {
     statusEl.textContent = `Keyword is too long (max ${maxKeyLength} characters).`;
     return;
@@ -328,7 +353,7 @@ async function saveEdit(
         statusEl.textContent = `URL is too long (max ${MAX_URL_LENGTH} characters).`;
         return;
       }
-      const url = normalizeUrl(urlOrLabel);
+      const url = sanitizeStoredUrl(urlOrLabel);
       if (!url) { statusEl.textContent = 'Enter a valid http(s) URL.'; return; }
       updated = { ...original, key: newKey, url, label: trimmedLabel || undefined };
     } else if (original.type === 'parameterized') {
@@ -391,6 +416,7 @@ export function buildShortcutRow(
   isAlias = false,
   onEditBundle?: (shortcut: Shortcut) => void,
 ): HTMLLIElement {
+  rowRender = onRender;
   const li = document.createElement('li');
   if (isAlias) li.classList.add('alias-row');
 
@@ -478,6 +504,8 @@ export function buildShortcutRow(
       await onRender();
       if (result.skipped.length > 0) {
         showToast(`Could not restore "${shortcut.key}" — that keyword is now in use.`);
+      } else if (result.invalid.length > 0) {
+        showToast(`Could not restore "${shortcut.key}" — the saved record is no longer valid.`);
       }
     });
   };
@@ -633,7 +661,7 @@ export function buildShortcutRow(
   cancelBtn.className = 'btn-secondary btn-sm';
   cancelBtn.textContent = 'Cancel';
   cancelBtn.addEventListener('click', () => {
-    cancelRowEdit();
+    cancelRowEdit({ restoreFocus: true });
   });
 
   if (onAlias && shortcut.type !== 'bundle') {

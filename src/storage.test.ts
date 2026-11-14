@@ -843,8 +843,46 @@ describe('audit regressions: settings coercion and write-boundary limits', () =>
     await upsertShortcut({ key: 'gh', url: 'https://gitlab.com', type: 'redirect' });
 
     const result = await restoreShortcuts([original]);
-    expect(result).toEqual({ restored: 0, skipped: ['gh'] });
+    expect(result).toEqual({ restored: 0, skipped: ['gh'], invalid: [] });
     expect((await getStore()).shortcuts['gh']!.url).toBe('https://gitlab.com');
+  });
+
+  it('restores legacy over-cap keys and field sizes instead of dropping the undo batch', async () => {
+    const legacyKey = 'l'.repeat(50);
+    const urls = Array.from({ length: 33 }, (_, i) => `https://e${i}.example`);
+    const legacyRecord = {
+      key: legacyKey,
+      url: urls[0]!,
+      bundleUrls: urls,
+      label: 'x'.repeat(300),
+      type: 'bundle' as const,
+    };
+    const result = await restoreShortcuts([legacyRecord]);
+    expect(result).toEqual({ restored: 1, skipped: [], invalid: [] });
+    const restored = (await getStore()).shortcuts[legacyKey]!;
+    expect(restored.bundleUrls).toHaveLength(33);
+    expect(restored.label).toHaveLength(300);
+  });
+
+  it('restores a context-menu single-label intranet URL on undo', async () => {
+    await upsertShortcut({ key: 'router', url: 'http://router/admin', type: 'redirect' });
+    const original = (await getStore()).shortcuts['router']!;
+    await deleteShortcut('router');
+    const result = await restoreShortcuts([original]);
+    expect(result).toEqual({ restored: 1, skipped: [], invalid: [] });
+    expect((await getStore()).shortcuts['router']!.url).toBe('http://router/admin');
+  });
+
+  it('keeps single-label intranet URLs on read instead of blanking them', async () => {
+    syncStore[`${SHORTCUT_PREFIX}router`] = {
+      key: 'router', url: 'http://router/admin', type: 'redirect',
+    };
+    syncStore[`${SHORTCUT_PREFIX}wiki`] = {
+      key: 'wiki', url: 'http://intranet/wiki/page', type: 'redirect',
+    };
+    const store = await getStore();
+    expect(store.shortcuts['router']!.url).toBe('http://router/admin');
+    expect(store.shortcuts['wiki']!.url).toBe('http://intranet/wiki/page');
   });
 
   it('serializes concurrent creates at the shortcut cap', async () => {
