@@ -1,0 +1,56 @@
+name: research-wake
+
+# Starts the GCP devbox at 06:45 EST on Black Friday (Nov 27) and Cyber Monday
+# (Nov 30), so the VM's user timer can run the backpack price re-check at 07:00.
+# Auth reuses the same GitHub OIDC -> GCP WIF setup as factory-wake.
+#
+# GitHub cron is UTC: 11:45 UTC = 06:45 EST.
+
+on:
+  schedule:
+    - cron: '45 11 27 11 *'   # 2026-11-27 06:45 EST — Black Friday
+    - cron: '45 11 30 11 *'   # 2026-11-30 06:45 EST — Cyber Monday
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SA_EMAIL }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Start devbox if stopped
+        env:
+          VM: ${{ vars.VM_NAME }}
+          ZONE: ${{ vars.GCP_ZONE }}
+          PROJECT: ${{ vars.GCP_PROJECT }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 24); do
+            status=$(gcloud compute instances describe "$VM" \
+              --zone "$ZONE" --project "$PROJECT" --format='value(status)')
+            echo "devbox: $status"
+            case "$status" in
+              RUNNING)
+                echo "already running; the 07:00 timer will handle the job"
+                exit 0 ;;
+              TERMINATED|STOPPED|SUSPENDED)
+                gcloud compute instances start "$VM" --zone "$ZONE" --project "$PROJECT"
+                exit 0 ;;
+              STOPPING|SUSPENDING|PROVISIONING|STAGING|REPAIRING)
+                sleep 5 ;;
+              *)
+                echo "unexpected status; not starting"
+                exit 1 ;;
+            esac
+          done
+          echo "timed out waiting for a stable status"
+          exit 1
